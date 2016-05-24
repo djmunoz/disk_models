@@ -545,11 +545,6 @@ class disk_mesh():
                     Rmax,zmax = 3 * Rmax, 3*Rmax
                     
             
-            
-            #plt.plot(R*np.cos(phi),R*np.sin(phi),'bo')
-            plt.plot(R*np.cos(phi),z,'bo')
-            plt.show()                    
-            
  
             return R,phi,z
 
@@ -662,15 +657,15 @@ class snapshot():
 
     def create(self,disk,disk_mesh):
         
-        R,phi,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
+        R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
         
-        self.load(R,phi,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
+        self.load(R,phi,z,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
 
-    def load(self,R,phi,dens,vphi,vr,press,ids,BoxSize,adiabatic_gamma):
+    def load(self,R,phi,z,dens,vphi,vr,press,ids,BoxSize,adiabatic_gamma):
         
         x = R * np.cos(phi) + 0.5 * BoxSize
         y = R * np.sin(phi) + 0.5 * BoxSize
-        z = np.zeros(x.shape[0])
+        z = z + 0.5 * BoxSize
         
         vx = vr * np.cos(phi) - vphi * np.sin(phi)
         vy = vr * np.sin(phi) + vphi * np.cos(phi)
@@ -696,11 +691,6 @@ class snapshot():
         midplane_dens[midplane_dens < dens_cut] = dens_cut
         dens0_profile =  interp1d(radii,midplane_dens,kind='linear')
 
-        print radii.min(),radii.max()
-        plt.plot(radii,midplane_dens,marker='+')
-        plt.plot(radii,dens0_profile(radii))
-        plt.show()
-        
         #evaluate other quantities
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
         radii, angular_frequency_sq = disk.evaluate_angular_freq_centralgravity(R1,R2)
@@ -711,10 +701,7 @@ class snapshot():
         _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2)
         print radii.shape, sound_speed.shape,pressure_midplane.shape,pressure_midplane_gradient.shape,soundspeed_sq_gradient.shape
         angular_frequency = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
-        plt.plot(radii,angular_frequency_sq)
-        plt.plot(radii, pressure_midplane_gradient/dens0_profile(radii)/radii)
-        #plt.plot(radii,pressure_midplane)
-        plt.show()
+
 
         #interpolate mid-plane quantities
         vphi_profile = interp1d(radii,angular_frequency*radii,kind='linear')
@@ -735,8 +722,38 @@ class snapshot():
         ids = np.arange(1,R.shape[0]+1,1)
 
         
-        return R,phi,dens,vphi,vr,press,ids
+        return R,phi,z,dens,vphi,vr,press,ids
 
+
+    def incline(self,theta,phi,disk_mesh):
+        costheta,sintheta = np.cos(theta*np.pi/180.0),np.sin(theta*np.pi/180.0)
+        cosphi,sinphi = np.cos(phi*np.pi/180.0),np.sin(phi*np.pi/180.0)
+
+
+        self.pos[:,0]-= 0.5 * disk_mesh.BoxSize
+        self.pos[:,1]-= 0.5 * disk_mesh.BoxSize
+        self.pos[:,2]-= 0.5 * disk_mesh.BoxSize
+        
+        R = np.sqrt(self.pos[:,0]**2+self.pos[:,1]**2+self.pos[:,2]**2)
+        ind = R < 1.5 * disk_mesh.Rout 
+        print 2 * disk_mesh.Rout,disk_mesh.BoxSize 
+        print R
+        
+        print "hello",self.pos[ind,:].shape
+        
+        self.pos[ind,1],self.pos[ind,2] = costheta * (self.pos[ind,1]) - sintheta * self.pos[ind,2],\
+                               sintheta * self.pos[ind,1] + costheta * self.pos[ind,2]
+        self.pos[ind,0],self.pos[ind,1] = cosphi * self.pos[ind,0] - sinphi * self.pos[ind,1], \
+                                sinphi * self.pos[ind,0] + cosphi * self.pos[ind,1]
+
+        self.vel[ind,1],self.vel[ind,2] = costheta * self.vel[ind,1] - sintheta * self.vel[ind,2],\
+                               sintheta * self.vel[ind,1] + costheta * self.vel[ind,2]
+        self.vel[ind,0],self.vel[ind,1] = cosphi * self.vel[ind,0] - sinphi * self.vel[ind,1], \
+                                sinphi * self.vel[ind,0] + cosphi * self.vel[ind,1]
+        
+        self.pos[:,0]+= 0.5 * disk_mesh.BoxSize
+        self.pos[:,1]+= 0.5 * disk_mesh.BoxSize
+        self.pos[:,2]+= 0.5 * disk_mesh.BoxSize
 
     def extract(self,index):
         self.pos=self.pos[index,:]
@@ -753,6 +770,8 @@ class snapshot():
         self.ids=np.append(self.ids,snapshot.ids)
         self.ids[self.ids > 0] = np.arange(1,1+self.ids[self.ids > 0].shape[0])
 
+
+        
     def write_snapshot(self,disk,disk_mesh,filename="disk.dat.hdf5",time=0):
         
        

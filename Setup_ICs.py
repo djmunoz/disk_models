@@ -12,10 +12,15 @@ if __name__=="__main__":
 
     #DISK MESH
     mesh = d3d.disk_mesh(mesh_type="mc",Ncells=10000,fill_background=True,
-                         fill_center=True,fill_box=True,BoxSize=50)
+                         fill_center=True,fill_box=True,BoxSize=40)
     #mesh.create(d)
 
     s = d3d.snapshot()
     s.create(d,mesh)
+    s.incline(60,0,mesh)
+
+    plt.plot(s.pos[:,0],s.pos[:,1],'b.')
+    plt.xlim(0.5*mesh.BoxSize-mesh.Rout,0.5*mesh.BoxSize+mesh.Rout)
+    plt.ylim(0.5*mesh.BoxSize-mesh.Rout,0.5*mesh.BoxSize+mesh.Rout)
+    plt.show()
     
-    print "what"
