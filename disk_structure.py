@@ -319,7 +319,6 @@ class disk(object):
         return zvals, zmass
     
     def spherical_potential(self,r,soft=0.01):
-        #print "hehe",SplineProfile(r,soft)
         return SplineProfile(r,soft)
     
     def vertical_potential(self,R,z,M_central=1.0,G=1,soft=0.01):
@@ -336,10 +335,8 @@ class disk(object):
         else: R_bins = 700
         radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
         #fix the bins a bit
-        print radial_bins
         dRin = radial_bins[1]-radial_bins[0]
         radial_bins = np.append(np.arange(0,radial_bins[1],dRin/10),radial_bins[1:])
-        print radial_bins
         
         bin_inds=np.digitize(R,radial_bins)
         mid_plane = []
@@ -347,7 +344,6 @@ class disk(object):
         zin,zout = 0.99*np.abs(z).min(),1.01*np.abs(z).max()
         for kk in range(0,radial_bins.shape[0]):
             N_in_bin = R[bin_inds == kk].shape[0]
-            print kk,R_bins,radial_bins[kk]
             if (N_in_bin == 0):
                 mid_plane.append(0.0)
                 radii.append(radial_bins[kk])
@@ -357,7 +353,6 @@ class disk(object):
             mid_plane.append(rho0)
             radii.append(bin_radius)
             dens_profile = interp1d(zvals,zrhovals,kind='linear')
-            print kk,R_bins,bin_radius,zvals.min(),zvals.max(),np.abs(z[bin_inds == kk]).min(),np.abs(z[bin_inds == kk]).max()
             dens[bin_inds == kk] = dens_profile(np.abs(z[bin_inds == kk]))
 
         return dens,np.array(radii),np.array(mid_plane)
@@ -524,7 +519,6 @@ class disk_mesh():
                 z = np.append(z,zcenter)
 
             if (self.fill_box == True):
-                print "hello"
                 Rmax = R.max()
                 zmax = np.abs(z).max()
                 Nlayers = 1
@@ -695,11 +689,9 @@ class snapshot():
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
         radii, angular_frequency_sq = disk.evaluate_angular_freq_centralgravity(R1,R2)
         _, sound_speed = disk.evaluate_soundspeed(R1,R2)
-        print radii.min(),radii.max()
         pressure_midplane = dens0_profile(radii) * sound_speed**2
         _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2)
         _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2)
-        print radii.shape, sound_speed.shape,pressure_midplane.shape,pressure_midplane_gradient.shape,soundspeed_sq_gradient.shape
         angular_frequency = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
 
 
@@ -736,10 +728,6 @@ class snapshot():
         
         R = np.sqrt(self.pos[:,0]**2+self.pos[:,1]**2+self.pos[:,2]**2)
         ind = R < 1.5 * disk_mesh.Rout 
-        print 2 * disk_mesh.Rout,disk_mesh.BoxSize 
-        print R
-        
-        print "hello",self.pos[ind,:].shape
         
         self.pos[ind,1],self.pos[ind,2] = costheta * (self.pos[ind,1]) - sintheta * self.pos[ind,2],\
                                sintheta * self.pos[ind,1] + costheta * self.pos[ind,2]
