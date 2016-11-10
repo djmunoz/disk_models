@@ -5,6 +5,8 @@ import snapHDF5 as ws
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz
+from scipy.spatial import Voronoi
+
 
 
 
@@ -133,7 +135,7 @@ class similarity_cavity_disk(object):
         if (self.Rc == None):
             self.Rc = 1.0
         if (self.R_cav == None):
-            self.R_cav = 5.0
+            self.R_cav = 1.0
         if (self.xi == None):
             self.xi = 4.0
 
@@ -306,15 +308,17 @@ class disk(object):
         radial_bins= MasstoRadius(np.linspace(0.0,1.0,Nbins)*max(mvals))
         return radial_bins
     
-    def evaluate_vertical_structure(self,R,zin,zout,Nzvals=300):
-        def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
-        VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*100)[0])
+    def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
         zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
+        #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
+        #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
+        zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+        VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
         zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
         return zvals,zrho,VertProfileNorm
 
-    def evaluate_enclosed_vertical(self,R,zin,zout,Nzvals=300):
-        zvals, zrho,_ = self.evaluate_vertical_structure(R,zin,zout,Nzvals)
+    def evaluate_enclosed_vertical(self,R,zin,zout,Nzvals=400):
+        zvals, zrho, _ = self.evaluate_vertical_structure(R,zin,zout,Nzvals)
         zmass = np.append(0,cumtrapz(zrho,zvals))
         return zvals, zmass
     
@@ -328,15 +332,15 @@ class disk(object):
 
         dens = np.zeros(R.shape[0])
         
-        if (Ncells < 50000): R_bins = 120
-        elif (Ncells < 100000): R_bins = 160
-        elif (Ncells < 200000): R_bins = 250
+        if (Ncells < 50000): R_bins = 160
+        elif (Ncells < 100000): R_bins = 200
+        elif (Ncells < 200000): R_bins = 300
         elif (Ncells < 600000): R_bins   = 500
         else: R_bins = 700
         radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
         #fix the bins a bit
         dRin = radial_bins[1]-radial_bins[0]
-        radial_bins = np.append(np.arange(0,radial_bins[1],dRin/10),radial_bins[1:])
+        radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/50,radial_bins[1],dRin/50),radial_bins[1:]))
         
         bin_inds=np.digitize(R,radial_bins)
         mid_plane = []
@@ -348,8 +352,10 @@ class disk(object):
                 mid_plane.append(0.0)
                 radii.append(radial_bins[kk])
                 continue
+            #if (N_in_bin < 10) & (zout > 5*(z[bin_inds == kk]).mean()): #| (zout/200 > np.abs(z[bin_inds == kk]).max()):
+            #    zout = np.abs(z[bin_inds == kk]).mean()*5
             bin_radius = R[bin_inds == kk].mean()
-            zvals,zrhovals,rho0 = self.evaluate_vertical_structure(bin_radius,zin,zout,Nzvals=500)
+            zvals,zrhovals,rho0 = self.evaluate_vertical_structure(bin_radius,zin,zout,Nzvals=600)
             mid_plane.append(rho0)
             radii.append(bin_radius)
             dens_profile = interp1d(zvals,zrhovals,kind='linear')
@@ -364,6 +370,7 @@ class disk_mesh():
         self.mesh_type=kwargs.get("mesh_type")
         self.Rin = kwargs.get("Rin")
         self.Rout = kwargs.get("Rout")
+        self.zmax = 0.0
         self.NR = kwargs.get("NR")
         self.Nphi = kwargs.get("Nphi")
         self.Ncells = kwargs.get("Ncells")
@@ -442,6 +449,7 @@ class disk_mesh():
                 ind = Rback > R.max()+2.5 * self.deltaRout
                 Rback, phiback = Rback[ind], phiback[ind]
 
+                print "....adding %i additional mesh-generating points" % (Rback.shape[0])
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)
 
@@ -462,6 +470,7 @@ class disk_mesh():
                 ind = Rcenter < R.min() - 2* self.deltaRin
                 Rcenter, phicenter = Rcenter[ind], phicenter[ind]
 
+                print "....adding %i additional mesh-generating points" % (Rcenter.shape[0])
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
 
@@ -475,30 +484,33 @@ class disk_mesh():
 
 
             if (self.fill_background == True):
-                Rback,phiback = self.mc_sample_2d(disk,Npoints=0.15 * self.Ncells)
+                Rback,phiback = self.mc_sample_2d(disk,Npoints=0.1 * self.Ncells)
                 zback = self.mc_sample_vertical_background(R,Rback,z,disk)
                 Rbackmax = Rback.max()
+                print "....adding %i additional mesh-generating points" % (Rback.shape[0])
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)
                 z = np.append(z,zback)
                 
-                Lx,Ly,Lz = 2*Rbackmax,2*Rbackmax,2*zback.max()
-                delta = zback.max()/4
-                xback,yback,zback = self.sample_fill_box(Lx,Ly,Lz,delta)
+                Lx,Ly,Lz = 2*Rbackmax,2*Rbackmax,2.2*np.abs(zback).max()
+                delta = zback.max()/3
+                xback,yback,zback = self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 Rback = np.sqrt(xback**2+yback**2)
                 phiback = np.arctan2(yback,xback)
                 ind = Rback > Rbackmax
                 Rback, phiback,zback = Rback[ind], phiback[ind],zback[ind]
 
+                print "....adding %i additional mesh-generating points" % (Rback.shape[0])
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)
                 z = np.append(z,zback)
 
+            self.zmax = np.abs(z).max()
                 
             if (self.fill_center == True):
                 Rmin  = R.min()
                 Rmax  = R.max()
-                zmax  = z.max()
+                zmax  = np.abs(z).max()
                 rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=100)
                 cellmass = mvals[-1]/self.Ncells
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
@@ -506,38 +518,50 @@ class disk_mesh():
                 sigma_in = disk.sigma_disk.evaluate(Rmin)
                 if (sigma_in < disk.sigma_cut): sigma_in = disk.sigma_cut
                 rho_in = sigma_in/zmax
-                delta = 0.3*(cellmass/rho_in)**0.333333
+                delta = 0.15*(cellmass/rho_in)**0.333333
                 Lx, Ly, Lz = 2 * Rmin, 2 * Rmin,2*zmax
-                xcenter,ycenter,zcenter =  self.sample_fill_box(Lx,Ly,Lz,delta)
+                xcenter,ycenter,zcenter =  self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 Rcenter = np.sqrt(xcenter**2+ycenter**2)
                 phicenter = np.arctan2(ycenter,xcenter)
                 ind = Rcenter < Rmin 
                 Rcenter, phicenter,zcenter = Rcenter[ind], phicenter[ind],zcenter[ind]
 
+                print "....adding %i additional mesh-generating points" % (Rcenter.shape[0])
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
                 z = np.append(z,zcenter)
 
             if (self.fill_box == True):
-                Rmax = R.max()
-                zmax = np.abs(z).max()
-                Nlayers = 1
-                if (self.BoxSize > 3 * Rmax):
+                zmax0 = np.abs(z).max()
+                Rmax0 = R.max()
+                Nlayers = 0
+                Lx, Ly, Lz = min(2.1 * Rmax0,self.BoxSize), min(2.1 * Rmax0,self.BoxSize), min(2.1 * zmax0,self.BoxSize)
+                delta  = 0.4 * zmax0
+                xbox,ybox,zbox =  self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
+                rbox = np.sqrt(xbox**2+ybox**2)
+                ind = (rbox > Rmax0) | (np.abs(zbox) > zmax0)
+                print "....adding %i additional mesh-generating points" % (rbox[ind].shape[0])
+                R = np.append(R,rbox[ind])
+                phi = np.append(phi,np.arctan2(ybox[ind],xbox[ind]))
+                z=np.append(z,zbox[ind])
+
+                while (Lx < self.BoxSize-0.5*delta) | (Lz < self.BoxSize- 0.5*delta):
+                #while ((0.5*self.BoxSize > (R.max()/np.sqrt(2) + 1.5*delta))
+                #       | (0.5*self.BoxSize > (np.abs(z).max()+1.5*delta))):
+                    #print Lx, Ly, Lz,R.max()/np.sqrt(2),z.max(),delta
+                    if (Nlayers > 8): break
                     Nlayers+=1
-                    if  (self.BoxSize > 9 * Rmax):
-                        Nlayers+1
-                for jj in range(Nlayers):
-                    Lx, Ly, Lz = 3 * Rmax, 3 * Rmax, 3 * Rmax
-                    delta  = 0.3 * Rmax
-                    xcenter,ycenter,zcenter =  self.sample_fill_box(Lx,Ly,Lz,delta)
-                    ind = (np.abs(xcenter) > Rmax) & (np.abs(xcenter) < 0.5 * self.BoxSize) &\
-                          (np.abs(ycenter) > Rmax) & (np.abs(ycenter) < 0.5 * self.BoxSize) &\
-                          (np.abs(zcenter) > zmax) & (np.abs(zcenter) < 0.5 * self.BoxSize)
-                    R = np.append(R,np.sqrt(xcenter**2+ycenter**2))
-                    phi = np.append(phi,np.arctan2(ycenter,xcenter))
-                    z=np.append(z,zcenter)
-                    Rmax,zmax = 3 * Rmax, 3*Rmax
-                    
+                    lmax,zmax = R.max()/np.sqrt(2), z.max()
+                    Lx, Ly, Lz = min(2.0 * Lx,self.BoxSize), min(2.0 * Ly,self.BoxSize), min(6 * Lz,self.BoxSize)
+                    Lx_in, Ly_in, Lz_in = np.abs(R*np.cos(phi)).max(),np.abs(R*np.sin(phi)).max(),zmax
+                    delta  = min(max(Lx,Lz)*1.0/32*Nlayers,0.4*min(Lx-Lx_in,Lz-Lz_in))
+                    xbox,ybox,zbox =  self.sample_fill_box(Lx_in,Lx,Ly_in,Ly,Lz_in,Lz,delta)
+
+                    print "....adding %i additional mesh-generating points" % (xbox.shape[0])
+                    R = np.append(R,np.sqrt(xbox**2+ybox**2))
+                    phi = np.append(phi,np.arctan2(ybox,xbox))
+                    z=np.append(z,zbox)
+
             
  
             return R,phi,z
@@ -575,6 +599,10 @@ class disk_mesh():
         for kk in range(0,R_bins):
             N_in_bin = R[bin_inds == kk].shape[0]
             if (N_in_bin == 0): continue
+
+            if (N_in_bin < 10):
+                z[bin_inds == kk] = 0.0
+                continue
             
             bin_radius = R[bin_inds == kk].mean()
             scale_height_guess = bin_radius * soundspeed(bin_radius,disk.csnd0,disk.l,disk.csndR0)/np.sqrt(disk.Mcentral/bin_radius)
@@ -630,16 +658,35 @@ class disk_mesh():
         return xran
 
                 
-    def sample_fill_box(self,Lx,Ly,Lz,delta):
+    def sample_fill_box(self,Lx_in,Lx_out,Ly_in,Ly_out,Lz_in,Lz_out,delta):
         
-        xbox,ybox,zbox = np.meshgrid(np.arange(-0.49 * Lx+0.5*delta, 0.49 * Lx,delta),
-                                     np.arange(-0.49 * Ly+0.5*delta, 0.49 * Ly,delta),
-                                     np.arange(-0.49 * Lz+0.5*delta, 0.49 * Lz,delta))
-        
+        xbox,ybox,zbox = np.meshgrid(np.arange(-(0.5 * Lx_out)+0.5*delta, (0.5 * Lx_out),delta),
+                                     np.arange(-(0.5 * Ly_out)+0.5*delta, (0.5 * Ly_out),delta),
+                                     np.arange(-(0.5 * Lz_out)+0.5*delta, (0.5 * Lz_out),delta))
         xbox,ybox,zbox =  xbox.flatten(),ybox.flatten(),zbox.flatten()
+        ind = (np.abs(xbox) > 0.5* Lx_in) | (np.abs(ybox) > 0.5*Ly_in) | (np.abs(zbox) > 0.5*Lz_in) 
+        
+        xbox,ybox,zbox =  xbox[ind],ybox[ind],zbox[ind]
         
         return xbox,ybox,zbox
 
+
+class params():
+     def __init__(self,*args,**kwargs):
+        self.targetmass=kwargs.get("targetmass")
+        self.minvol=kwargs.get("minvol")
+        self.maxvol=kwargs.get("maxvol")
+
+        
+        if (self.targetmass == None):
+            self.targetmass = 0.0
+        if (self.minvol == None):
+            self.minvol = 0.0
+        if (self.maxvol == None):
+            self.maxvol = 0.0
+
+
+            
 class snapshot():
 
     def __init__(self,*args,**kwargs):
@@ -649,12 +696,29 @@ class snapshot():
         self.utherm=kwargs.get("utherm")
         self.ids=kwargs.get("ids")
 
+        self.params = params()
+        
     def create(self,disk,disk_mesh):
         
         R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
+
         
         self.load(R,phi,z,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
 
+        rvals,mvals = disk.evaluate_enclosed_mass(disk_mesh.Rin,disk_mesh.Rout,Nvals=100)
+        self.params.targetmass = mvals[-1]/disk_mesh.Ncells
+        ind = (R < 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
+        self.params.maxvol = 4.0/3*np.pi * disk_mesh.Rout**3 * (1.2**3-1.0)/ R[ind].shape[0]
+        ind = (R > disk_mesh.Rin) & ((R < disk_mesh.Rout))
+        self.params.maxvol = self.params.targetmass/dens[ind].min()
+        self.params.minvol = self.params.targetmass/dens[ind].max()
+
+        print "VOL",self.params.minvol,self.params.maxvol  
+        
+
+        
+        print disk_mesh.Rin
+        
     def load(self,R,phi,z,dens,vphi,vr,press,ids,BoxSize,adiabatic_gamma):
         
         x = R * np.cos(phi) + 0.5 * BoxSize
@@ -668,6 +732,7 @@ class snapshot():
         self.dens = dens
         self.pos = np.array([x,y,z]).T
         self.vel = np.array([vx,vy,vz]).T
+        print "GAMMA", adiabatic_gamma
         self.utherm = press/self.dens/(adiabatic_gamma - 1)
         self.ids = ids
     
@@ -677,6 +742,13 @@ class snapshot():
         
         R,phi,z = disk_mesh.create(disk)
 
+        x = R*np.cos(phi)
+        y = R*np.sin(phi)
+        points = np.array([x,y,z]).T
+        print points.shape
+        #print "Voronoi"
+        #vor = Voronoi(points)
+        
         R1,R2 = 1e-4,1.5*disk_mesh.Rout
         #obtain density of cells
         dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
@@ -685,30 +757,44 @@ class snapshot():
         midplane_dens[midplane_dens < dens_cut] = dens_cut
         dens0_profile =  interp1d(radii,midplane_dens,kind='linear')
 
+        rr,sig =  disk.evaluate_sigma(R1,R2)
+        _,cs0 =  disk.evaluate_soundspeed(R1,R2)
+        dens0_guess = sig/np.sqrt(2*np.pi)/(cs0*np.sqrt(rr)*rr)
+
+        
         #evaluate other quantities
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
-        radii, angular_frequency_sq = disk.evaluate_angular_freq_centralgravity(R1,R2)
-        _, sound_speed = disk.evaluate_soundspeed(R1,R2)
+        radii, angular_frequency_sq = disk.evaluate_angular_freq_centralgravity(R1,R2,Nvals=600)
+        _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=600)
         pressure_midplane = dens0_profile(radii) * sound_speed**2
-        _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2)
-        _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2)
+        _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=600)
+        _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2,Nvals=600)
         angular_frequency = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
 
-
+        
         #interpolate mid-plane quantities
         vphi_profile = interp1d(radii,angular_frequency*radii,kind='linear')
-        soundspeedsq_profile = interp1d(radii,sound_speed,kind='linear')
+        soundspeedsq_profile = interp1d(radii,sound_speed**2,kind='linear')
         soundspeedsq_gradient_profile = interp1d(radii,soundspeed_sq_gradient,kind='linear')
 
         #primitive variables
         vphi, press = np.zeros(R.shape),np.zeros(R.shape)
-        ind = R < disk_mesh.Rout
+        ind = (R < disk_mesh.Rout) & (np.abs(z) < disk_mesh.zmax) 
         vphi[ind] = vphi_profile(R[ind]) -  soundspeedsq_gradient_profile(R[ind]) * np.log(dens[ind]/dens0_profile(R[ind]))
         press[ind] = dens[ind] * soundspeedsq_profile(R[ind])
-        ind = R >= disk_mesh.Rout
+        ind = (R >= disk_mesh.Rout) | (np.abs(z) > disk_mesh.zmax) 
         vphi[ind] = 0
-        dens[ind] = dens_cut
-        press[ind] = dens_cut * soundspeed(disk_mesh.Rout,disk.csnd0,disk.l,disk.csndR0)**2
+        dens[ind] = dens_cut/10000
+        press_cut = dens_cut * soundspeed(disk_mesh.Rout,disk.csnd0,disk.l,disk.csndR0)**2
+        press[ind] = press_cut
+        ind = R< disk_mesh.Rin 
+        vphi[ind] = vphi[ind]*np.exp(-(disk_mesh.Rin-R[ind])**2/R[ind]**2)
+        dens[ind] = dens_cut/100000
+        ind = dens < dens_cut/100
+        press[ind] = press_cut
+
+        print "DENS_CUT",dens_cut
+        print "PRESS_CUT",press_cut
         
         vr = np.zeros(R.shape)
         ids = np.arange(1,R.shape[0]+1,1)
