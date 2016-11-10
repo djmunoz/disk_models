@@ -67,11 +67,11 @@ class powerlaw_disk(object):
 
 
         #set default values
-        if (self.sigma0 == None):
+        if (self.sigma0 is None):
             self.sigma0 = 1.0
-        if (self.p == None):
+        if (self.p is None):
             self.p = 1.0
-        if (self.R0 == None):
+        if (self.R0 is None):
             self.R0 = 1.0
 
     def evaluate(self,R):
@@ -84,11 +84,11 @@ class similarity_disk(object):
         self.Rc = kwargs.get("Rc")
 
         #set default values
-        if (self.sigma0 == None):
+        if (self.sigma0 is None):
             self.sigma0 = 1.0
-        if (self.gamma == None):
+        if (self.gamma is None):
             self.gamma = 1.0
-        if (self.Rc == None):
+        if (self.Rc is None):
             self.Rc = 1.0
 
     def evaluate(self,R):
@@ -104,13 +104,13 @@ class powerlaw_cavity_disk(object):
 
 
         #set default values
-        if (self.sigma0 == None):
+        if (self.sigma0 is None):
             self.sigma0 = 1.0
-        if (self.p == None):
+        if (self.p is None):
             self.p = 1.0
-        if (self.R_cav == None):
+        if (self.R_cav is None):
             self.R_cav = 5.0
-        if (self.xi == None):
+        if (self.xi is None):
             self.xi = 4.0
 
     def evaluate(self,R):
@@ -128,15 +128,15 @@ class similarity_cavity_disk(object):
 
         
         #set default values
-        if (self.sigma0 == None):
+        if (self.sigma0 is None):
             self.sigma0 = 1.0
-        if (self.gamma == None):
+        if (self.gamma is None):
             self.gamma = 1.0
-        if (self.Rc == None):
+        if (self.Rc is None):
             self.Rc = 1.0
-        if (self.R_cav == None):
+        if (self.R_cav is None):
             self.R_cav = 1.0
-        if (self.xi == None):
+        if (self.xi is None):
             self.xi = 4.0
 
     def evaluate(self,R):
@@ -169,45 +169,45 @@ class disk(object):
         
 
         #set defaults 
-        if (self.sigma_type == None):
+        if (self.sigma_type is None):
             self.sigma_type="powerlaw"
-        if (self.l == None):
+        if (self.l is None):
             self.l = 1.0
-        if (self.csnd0 == None):
+        if (self.csnd0 is None):
             self.csnd0 = 0.05
-        if (self.adiabatic_gamma == None):
+        if (self.adiabatic_gamma is None):
             self.adiabatic_gamma = 7.0/5
-        if (self.effective_gamma == None):
+        if (self.effective_gamma is None):
             self.effective_gamma = 1.0
-        if (self.alphacoeff == None):
+        if (self.alphacoeff is None):
             self.alphacoeff = 0.01
-        if (self.Mcentral == None):
+        if (self.Mcentral is None):
             self.Mcentral = 1.0
-        if (self.quadrupole_correction == None):
+        if (self.quadrupole_correction is None):
             self.quadrupole_correction = 0
             
         if (self.sigma_type == "powerlaw"):
             self.sigma_disk = powerlaw_disk(**kwargs)
-            if (self.csndR0 == None):
+            if (self.csndR0 is None):
                 self.csndR0 = self.sigma_disk.R0
 
         if (self.sigma_type == "similarity"):
             self.sigma_disk = similarity_disk(**kwargs)
-            if (self.csndR0 == None):
+            if (self.csndR0 is None):
                 self.csndR0 = self.sigma_disk.Rc
 
         if (self.sigma_type == "powerlaw_cavity"):
             self.sigma_disk = powerlaw_cavity_disk(**kwargs)
-            if (self.csndR0 == None):
+            if (self.csndR0 is None):
                 self.csndR0 = self.sigma_disk.R_cav
 
         if (self.sigma_type == "similarity_cavity"):
             self.sigma_disk = similarity_cavity_disk(**kwargs)
-            if (self.csndR0 == None):
+            if (self.csndR0 is None):
                 self.csndR0 = self.sigma_disk.Rc
 
                 
-        if (self.sigma_cut == None):
+        if (self.sigma_cut is None):
             self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
         
             
@@ -383,31 +383,31 @@ class disk_mesh():
         self.fill_background = kwargs.get("fill_background")
 
         # set default values
-        if (self.mesh_type == None):
+        if (self.mesh_type is None):
             self.mesh_type="polar"
-        if (self.Rin == None):
+        if (self.Rin is None):
             self.Rin = 1
-        if (self.Rout == None):
+        if (self.Rout is None):
             self.Rout = 10
-        if (self.NR == None):
+        if (self.NR is None):
             self.NR = 800
-        if (self.Nphi == None):
+        if (self.Nphi is None):
             self.Nphi = 600
-        if (self.Ncells == None):
+        if (self.Ncells is None):
             self.Ncells =  self.NR * self.Nphi
-        if (self.N_inner_boundary_rings == None):
+        if (self.N_inner_boundary_rings is None):
             self.N_inner_boundary_rings = 1
-        if (self.N_outer_boundary_rings == None):
+        if (self.N_outer_boundary_rings is None):
             self.N_outer_boundary_rings = 1            
             
-        if (self.BoxSize == None):
+        if (self.BoxSize is None):
             self.BoxSize = 1.2 * 2* self.Rout
             
-        if (self.fill_box == None):
+        if (self.fill_box is None):
             self.fill_box = False
-        if (self.fill_center == None):
+        if (self.fill_center is None):
             self.fill_center = False   
-        if (self.fill_background == None):
+        if (self.fill_background is None):
             self.fill_background = False   
 
             
@@ -570,7 +570,7 @@ class disk_mesh():
     def mc_sample_2d(self,disk,**kwargs):
 
         Npoints = kwargs.get("Npoints")
-        if (Npoints == None): Npoints = self.Ncells
+        if (Npoints is None): Npoints = self.Ncells
         
         rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout)
         R = self.mc_sample_from_mass(rvals,mvals,int(Npoints))
@@ -678,11 +678,11 @@ class params():
         self.maxvol=kwargs.get("maxvol")
 
         
-        if (self.targetmass == None):
+        if (self.targetmass is None):
             self.targetmass = 0.0
-        if (self.minvol == None):
+        if (self.minvol is None):
             self.minvol = 0.0
-        if (self.maxvol == None):
+        if (self.maxvol is None):
             self.maxvol = 0.0
 
 
