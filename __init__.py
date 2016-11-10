@@ -1,3 +1,6 @@
-__all__ = ['disk_structure.py']
+__all__ = ['disk',
+           'disk_mesh',
+           'snapshot'
+           ]
 
-import disk_structure
+from disk_structure import disk, disk_mesh, snapshot

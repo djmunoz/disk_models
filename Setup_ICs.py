@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import disk_3d_models.disk_structure as d3d
+import disk_3d_models as d3d
 import sys
 
 
