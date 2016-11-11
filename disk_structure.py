@@ -6,6 +6,7 @@ from scipy.interpolate import interp1d
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz
 from scipy.spatial import Voronoi
+import scipy.integrate as integ
 
 from disk_density_profiles import *
 
@@ -67,7 +68,9 @@ class disk(object):
         self.Mcentral = kwargs.get("Mcentral")
         self.quadrupole_correction =  kwargs.get("quadrupole_correction")
 
-        
+        # other properties
+        self.self_gravity = kwargs.get("self_gravity")
+        self.central_particle = kwargs.get("central_particle")
 
         #set defaults 
         if (self.sigma_type is None):
@@ -110,7 +113,13 @@ class disk(object):
                 
         if (self.sigma_cut is None):
             self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
-        
+
+        if (self.self_gravity is None):
+            self.self_gravity = False
+
+        if (self.central_particle is None):
+            self.central_particle = False
+
             
     def evaluate_sigma(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
@@ -208,16 +217,72 @@ class disk(object):
         MasstoRadius=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
         radial_bins= MasstoRadius(np.linspace(0.0,1.0,Nbins)*max(mvals))
         return radial_bins
-    
-    def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
+
+    def evaluate_vertical_structure_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
+        zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
+
+        m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
+        
+        # First take a guess of the vertical structure        
+        if (m_enclosed < 0.1 * self.Mcentral):
+            zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+            VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+        else:
+            VertProfileNorm = self.sigma_disk.evaluate(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
+
+        VertProfileNorm_old = 1.0e-40
+        if (VertProfileNorm < VertProfileNorm_old): VertProfileNorm = VertProfileNorm_old
+        print VertProfileNorm_old,VertProfileNorm,m_enclosed < 0.1 * self.Mcentral,self.Mcentral,R
+
+        
+        def VerticalPotentialEq(Phi,z,r,rho0):
+            dPhiGrad_dz =  rho0 * G* 4 * np.pi * np.exp(-(self.vertical_potential(r,z) + Phi[1]) / soundspeed(r,self.csnd0,self.l,self.csndR0)**2)
+            dPhi_dz = Phi[0]
+            return [dPhiGrad_dz,dPhi_dz]
+
+        iterate = 0
+        while(True) : #iteration
+            #print iterate
+            min_step = (zvals[1]-zvals[0])/100.0
+            tol = 1.0e-8
+            # Solve for the vertical potential
+            soln=integ.odeint(VerticalPotentialEq,[0.0,0.0],zvals,args=(R,VertProfileNorm),rtol=tol,
+                              mxords=15,hmin=min_step,printmessg=False)[:,1]
+            zrho0=[np.exp(-(self.vertical_potential(R,zvals[kk])+soln[kk])/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for kk in range(len(zvals))]
+            VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+            zrho = [VertProfileNorm * r for r in zrho0]
+
+            if (VertProfileNorm * 1.333 * np.pi * R**3 < 1.0e-12 * self.Mcentral): break
+            # Check if vertical structure solution has converged
+            abstol,reltol = 1.0e-8,1.0e-5
+            abserr,relerr = np.abs(VertProfileNorm_old-VertProfileNorm),np.abs(VertProfileNorm_old-VertProfileNorm)/np.abs(VertProfileNorm_old)
+            
+            if (np.abs(VertProfileNorm) > abstol/reltol):
+                if (abserr < abstol): break
+            else:
+                if (relerr < reltol): break
+            VertProfileNorm_old = VertProfileNorm
+            iterate += 1
+
+        return zvals,zrho,VertProfileNorm
+
+    def evaluate_vertical_structure_no_selfgravity(self,R,zin,zout,Nzvals=400):
         zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
         #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
         #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
         zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
         VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
-        zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+        #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+        zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
+        print R,"hello"
         return zvals,zrho,VertProfileNorm
 
+    def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
+        if (self.self_gravity):
+            return self.evaluate_vertical_structure_selfgravity(R,zin,zout,Nzvals)
+        else:
+            return self.evaluate_vertical_structure_no_selfgravity(R,zin,zout,Nzvals)
+        
     def evaluate_enclosed_vertical(self,R,zin,zout,Nzvals=400):
         zvals, zrho, _ = self.evaluate_vertical_structure(R,zin,zout,Nzvals)
         zmass = np.append(0,cumtrapz(zrho,zvals))
@@ -229,9 +294,9 @@ class disk(object):
     def vertical_potential(self,R,z,M_central=1.0,G=1,soft=0.01):
         return -G*M_central * (self.spherical_potential(np.sqrt(R*R + z*z),soft) - self.spherical_potential(R,soft))
 
-    def solve_vertical_structure(self,R,z,Rin,Rout,Ncells):
+    def solve_vertical_structure(self,Rsamples,zsamples,Rin,Rout,Ncells):
 
-        dens = np.zeros(R.shape[0])
+        dens = np.zeros(Rsamples.shape[0])
         
         if (Ncells < 50000): R_bins = 160
         elif (Ncells < 100000): R_bins = 200
@@ -243,24 +308,24 @@ class disk(object):
         dRin = radial_bins[1]-radial_bins[0]
         radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/50,radial_bins[1],dRin/50),radial_bins[1:]))
         
-        bin_inds=np.digitize(R,radial_bins)
+        bin_inds=np.digitize(Rsamples,radial_bins)
         mid_plane = []
         radii = []
-        zin,zout = 0.99*np.abs(z).min(),1.01*np.abs(z).max()
+        zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
         for kk in range(0,radial_bins.shape[0]):
-            N_in_bin = R[bin_inds == kk].shape[0]
+            N_in_bin = Rsamples[bin_inds == kk].shape[0]
             if (N_in_bin == 0):
                 mid_plane.append(0.0)
                 radii.append(radial_bins[kk])
                 continue
             #if (N_in_bin < 10) & (zout > 5*(z[bin_inds == kk]).mean()): #| (zout/200 > np.abs(z[bin_inds == kk]).max()):
             #    zout = np.abs(z[bin_inds == kk]).mean()*5
-            bin_radius = R[bin_inds == kk].mean()
+            bin_radius = Rsamples[bin_inds == kk].mean()
             zvals,zrhovals,rho0 = self.evaluate_vertical_structure(bin_radius,zin,zout,Nzvals=600)
             mid_plane.append(rho0)
             radii.append(bin_radius)
             dens_profile = interp1d(zvals,zrhovals,kind='linear')
-            dens[bin_inds == kk] = dens_profile(np.abs(z[bin_inds == kk]))
+            dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))
 
         return dens,np.array(radii),np.array(mid_plane)
         
@@ -603,7 +668,8 @@ class snapshot():
         
         R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
 
-        
+
+        print "right here?"
         self.load(R,phi,z,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
 
         rvals,mvals = disk.evaluate_enclosed_mass(disk_mesh.Rin,disk_mesh.Rout,Nvals=100)

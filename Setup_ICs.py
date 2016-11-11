@@ -9,7 +9,8 @@ if __name__=="__main__":
 
     #DISK MODEL
     d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,
-                 R_cav=2.5,xi=3.1,Rout=15,adiabatic_gamma=1.00001)
+                 R_cav=2.5,xi=3.1,Rout=15,adiabatic_gamma=1.00001,
+                 self_gravity = True)
 
     #DISK MESH
     mesh = d3d.disk_mesh(mesh_type="mc",Ncells=500000,fill_background=True,
