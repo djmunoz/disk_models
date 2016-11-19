@@ -9,44 +9,18 @@ from scipy.spatial import Voronoi
 import scipy.integrate as integ
 
 from disk_density_profiles import *
+from disk_external_potentials import *
 
 
-def SplineProfile(R,h):
-    r2 = R*R
-    if(R >= h):
-        wp = - 1.0 / R
-    else:
-        h_inv = 1.0 / h
-        h3_inv = h_inv * h_inv * h_inv
-        u = R * h_inv
-        if(u < 0.5):
-            wp =  h_inv * (-2.8 + u * u * (5.333333333333 + u * u * (6.4 * u - 9.6)))
-        else:
-            wp = h_inv * (-3.2 + 0.066666666667 / u + u * u * (10.666666666667 + u * (-16.0 + u * (9.6 - 2.133333333333 * u))))
-      
-    return -wp
-  
-def SplineDerivative(R,h):
-    r2 = R * R
-    fac = 0.0
-    if(R >= h):
-        fac = 1.0 / (r2 * R)
-    else:
-        h_inv = 1.0 / h
-        h3_inv = h_inv * h_inv * h_inv
-        u = R * h_inv
-        if(u < 0.5):
-            fac = h3_inv * (10.666666666667 + u * u * (32.0 * u - 38.4))
-        else:
-            fac = h3_inv * (21.333333333333 - 48.0 * u + 38.4 * u * u - 10.666666666667 * u * u * u - 0.066666666667 / \
-                            (u * u * u))
-            
-    return fac
+
 
 
 
 class disk(object):
     def __init__(self, *args, **kwargs):
+        #units
+        self.G =  kwargs.get("G")
+        
         #define the properties of the axi-symmetric disk model
         self.sigma_type = kwargs.get("sigma_type")
         self.sigma_disk = None
@@ -66,13 +40,18 @@ class disk(object):
 
         #central object
         self.Mcentral = kwargs.get("Mcentral")
+        self.Mcentral_soft = kwargs.get("Mcentral_soft")
         self.quadrupole_correction =  kwargs.get("quadrupole_correction")
-
+        # potential type
+        self.potential_type = kwargs.get("potential_type")
+        
         # other properties
         self.self_gravity = kwargs.get("self_gravity")
         self.central_particle = kwargs.get("central_particle")
 
-        #set defaults 
+        #set defaults
+        if (self.G is None):
+            self.G = 1.0
         if (self.sigma_type is None):
             self.sigma_type="powerlaw"
         if (self.l is None):
@@ -87,8 +66,12 @@ class disk(object):
             self.alphacoeff = 0.01
         if (self.Mcentral is None):
             self.Mcentral = 1.0
+        if (self.Mcentral_soft is None):
+            self.Mcentral_soft = 1.0
         if (self.quadrupole_correction is None):
             self.quadrupole_correction = 0
+        if (self.potential_type is None):
+            self.potential_type="keplerian"
             
         if (self.sigma_type == "powerlaw"):
             self.sigma_disk = powerlaw_disk(**kwargs)
@@ -288,11 +271,12 @@ class disk(object):
         zmass = np.append(0,cumtrapz(zrho,zvals))
         return zvals, zmass
     
-    def spherical_potential(self,r,soft=0.01):
-        return SplineProfile(r,soft)
+    def spherical_potential(self,r):
+        if (self.potential_type == "keplerian"):
+            return -self.G * self.Mcentral * spherical_potential_keplerian(r,self.Mcentral_soft)
     
-    def vertical_potential(self,R,z,M_central=1.0,G=1,soft=0.01):
-        return -G*M_central * (self.spherical_potential(np.sqrt(R*R + z*z),soft) - self.spherical_potential(R,soft))
+    def vertical_potential(self,R,z):
+        return (self.spherical_potential(np.sqrt(R*R + z*z)) - self.spherical_potential(R))
 
     def solve_vertical_structure(self,Rsamples,zsamples,Rin,Rout,Ncells):
 
