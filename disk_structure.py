@@ -234,7 +234,6 @@ class disk(object):
 
         iterate = 0
         while(True) : #iteration
-            #print iterate
             min_step = (zvals[1]-zvals[0])/100.0
             tol = 1.0e-8
             # Solve for the vertical potential
@@ -266,7 +265,6 @@ class disk(object):
         VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
         #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
         zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
-        print R,"hello"
         return zvals,zrho,VertProfileNorm
 
     def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
@@ -454,9 +452,6 @@ class disk_mesh():
             zmax  = np.abs(z).max()
             Rmin  = R.min()
             Rmax  = R.max()
-
-            print R.shape,phi.shape,z.shape
-            print Radditional.shape,phiadditional.shape,zadditional.shape
             
             if (self.fill_background == True):
                 Rback,phiback = self.mc_sample_2d(disk,Npoints=0.1 * self.Ncells)
@@ -467,10 +462,7 @@ class disk_mesh():
                 phiadditional = np.append(phiadditional,phiback).flatten()
                 zadditional = np.append(zadditional,zback).flatten()
 
-                print Rback.shape,phiback.shape,zback.shape
-                print Radditional.shape,phiadditional.shape,zadditional.shape
-                
-                Lx,Ly,Lz = 2*Rbackmax,2*Rbackmax,2.2*np.abs(zback).max()
+                Lx,Ly,Lz = 2*Rbackmax,2*Rbackmax,np.abs(zback).max()+1.2*(Rbackmax -Rmax)
                 delta = zback.max()/3
                 xback,yback,zback = self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 Rback = np.sqrt(xback**2+yback**2)
@@ -487,8 +479,6 @@ class disk_mesh():
                 Rmax = max(Rmax,np.abs(Radditional).max())
                 Rmin = min(Rmin,np.abs(Radditional).min())
 
-            print R.shape,phi.shape,z.shape
-            print Radditional.shape,phiadditional.shape,zadditional.shape
             
             if (self.fill_center == True):
                 rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=100)
@@ -515,15 +505,13 @@ class disk_mesh():
                 Rmax = max(Rmax,np.abs(Radditional).max())
                 Rmin = min(Rmin,np.abs(Radditional).min())
 
-            print R.shape,phi.shape,z.shape
-            print Radditional.shape,phiadditional.shape,zadditional.shape
             
             if (self.fill_box == True):
                 zmax0 = zmax
                 Rmax0 = Rmax
                 Nlayers = 0
                 Lx, Ly, Lz = min(2.1 * Rmax0,self.BoxSize), min(2.1 * Rmax0,self.BoxSize), min(2.1 * zmax0,self.BoxSize)
-                delta  = 0.4 * zmax0
+                delta  = 1.5 * (zmax0/Rmax0)* zmax0
                 xbox,ybox,zbox =  self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 rbox = np.sqrt(xbox**2+ybox**2)
                 ind = (rbox > Rmax0) | (np.abs(zbox) > zmax0)
@@ -532,6 +520,7 @@ class disk_mesh():
                 phiadditional = np.append(phiadditional,np.arctan2(ybox[ind],xbox[ind]))
                 zadditional=np.append(zadditional,zbox[ind])
 
+                delta*=1.9
                 while (Lx < self.BoxSize-0.5*delta) | (Lz < self.BoxSize- 0.5*delta):
                 #while ((0.5*self.BoxSize > (R.max()/np.sqrt(2) + 1.5*delta))
                 #       | (0.5*self.BoxSize > (np.abs(z).max()+1.5*delta))):
@@ -539,9 +528,9 @@ class disk_mesh():
                     if (Nlayers > 8): break
                     Nlayers+=1
                     lmax,zetamax = max(R.max(),Radditional.max())/np.sqrt(2), max(z.max(),zadditional.max())
-                    Lx, Ly, Lz = min(2.0 * Lx,self.BoxSize), min(2.0 * Ly,self.BoxSize), min(6 * Lz,self.BoxSize)
+                    Lx, Ly, Lz = min(1.6 * Lx,self.BoxSize), min(1.6 * Ly,self.BoxSize), min(3.8 * Lz,self.BoxSize)
                     Lx_in, Ly_in, Lz_in = np.abs(R*np.cos(phi)).max(),np.abs(R*np.sin(phi)).max(),zetamax
-                    delta  = min(max(Lx,Lz)*1.0/32*Nlayers,0.4*min(Lx-Lx_in,Lz-Lz_in))
+
                     xbox,ybox,zbox =  self.sample_fill_box(Lx_in,Lx,Ly_in,Ly,Lz_in,Lz,delta)
 
                     print "....adding %i additional mesh-generating points" % (xbox.shape[0])
@@ -549,8 +538,8 @@ class disk_mesh():
                     phiadditional = np.append(phiadditional,np.arctan2(ybox,xbox))
                     zadditional=np.append(zadditional,zbox)
 
-            print R.shape,phi.shape,z.shape
-            print Radditional.shape,phiadditional.shape,zadditional.shape
+                    delta  = min(max(Lx,Lz)*1.0/16*Nlayers,0.6*min(Lx-Lx_in,Lz-Lz_in))
+
             if (self.fill_background | self.fill_center | self.fill_box):
                 # Check if we added TOO MANY additional mesh points
                 if (Radditional.shape[0] > self.max_fill_mesh_points):
@@ -565,8 +554,7 @@ class disk_mesh():
                     phi = np.append(phi,phiadditional)
                     z = np.append(z,zadditional)
 
-            print R.shape,phi.shape,z.shape
-            print "Added a total of %i extra points " % Radditional.shape[0]
+            print "Added a total of %i extra points\n" % Radditional.shape[0]
             return R,phi,z
 
                              
@@ -630,7 +618,7 @@ class disk_mesh():
 
     def mc_sample_vertical_background(self,R,Rback,z,disk):
 
-        zmax = 1.1*np.abs(z).max()
+        zmax = 1.3*np.abs(z).max()
         zback = np.zeros(Rback.shape[0])
     
         if (self.Ncells < 50000): R_bins = 40
@@ -710,7 +698,6 @@ class snapshot():
         R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
 
 
-        print "right here?"
         self.load(R,phi,z,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
 
         rvals,mvals = disk.evaluate_enclosed_mass(disk_mesh.Rin,disk_mesh.Rout,Nvals=100)
@@ -721,11 +708,7 @@ class snapshot():
         self.params.maxvol = self.params.targetmass/dens[ind].min()
         self.params.minvol = self.params.targetmass/dens[ind].max()
 
-        print "VOL",self.params.minvol,self.params.maxvol  
-        
-
-        
-        print disk_mesh.Rin
+    
         
     def load(self,R,phi,z,dens,vphi,vr,press,ids,BoxSize,adiabatic_gamma):
         
@@ -740,7 +723,6 @@ class snapshot():
         self.dens = dens
         self.pos = np.array([x,y,z]).T
         self.vel = np.array([vx,vy,vz]).T
-        print "GAMMA", adiabatic_gamma
         self.utherm = press/self.dens/(adiabatic_gamma - 1)
         self.ids = ids
     
@@ -753,11 +735,10 @@ class snapshot():
         x = R*np.cos(phi)
         y = R*np.sin(phi)
         points = np.array([x,y,z]).T
-        print points.shape
         #print "Voronoi"
         #vor = Voronoi(points)
         
-        R1,R2 = 1e-4,1.5*disk_mesh.Rout
+        R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
         #obtain density of cells
         dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
         dens_cut = midplane_dens[-1]
