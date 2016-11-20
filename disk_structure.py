@@ -11,7 +11,7 @@ import scipy.integrate as integ
 from disk_density_profiles import *
 from disk_external_potentials import *
 from disk_other_functions import *
-
+from disk_parameter_files import *
 
 
 
@@ -25,6 +25,7 @@ class disk(object):
         self.sigma_type = kwargs.get("sigma_type")
         self.sigma_disk = None
         self.sigma_cut = kwargs.get("sigma_cut")
+
 
         #Temperature profile properties
         self.csndR0 = kwargs.get("csndR0") #reference radius
@@ -118,6 +119,11 @@ class disk(object):
             return sigma * R * 2 * np.pi
         mass = [quad(mass_integrand,0.0,R)[0] for R in rvals]
         return rvals, mass
+
+    def compute_disk_mass(self,Rin,Rout):
+        __, mass =  self.evaluate_enclosed_mass(Rin,Rout,Nvals=2)
+        return mass[1]
+        
     
     def evaluate_soundspeed(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
@@ -666,20 +672,6 @@ class disk_mesh():
         return xbox,ybox,zbox
 
 
-class params():
-     def __init__(self,*args,**kwargs):
-        self.targetmass=kwargs.get("targetmass")
-        self.minvol=kwargs.get("minvol")
-        self.maxvol=kwargs.get("maxvol")
-
-        
-        if (self.targetmass is None):
-            self.targetmass = 0.0
-        if (self.minvol is None):
-            self.minvol = 0.0
-        if (self.maxvol is None):
-            self.maxvol = 0.0
-
 
             
 class snapshot():
@@ -691,7 +683,7 @@ class snapshot():
         self.utherm=kwargs.get("utherm")
         self.ids=kwargs.get("ids")
 
-        self.params = params()
+        self.params = paramfile(init_cond_file="./disk.dat")
         
     def create(self,disk,disk_mesh):
         
@@ -700,14 +692,13 @@ class snapshot():
 
         self.load(R,phi,z,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
 
-        rvals,mvals = disk.evaluate_enclosed_mass(disk_mesh.Rin,disk_mesh.Rout,Nvals=100)
-        self.params.targetmass = mvals[-1]/disk_mesh.Ncells
+        self.params.reference_gas_part_mass = disk.compute_disk_mass(disk_mesh.Rin,disk_mesh.Rout)/disk_mesh.Ncells
         ind = (R < 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
-        self.params.maxvol = 4.0/3*np.pi * disk_mesh.Rout**3 * (1.2**3-1.0)/ R[ind].shape[0]
+        self.params.max_volume = 4.0/3*np.pi * disk_mesh.Rout**3 * (1.2**3-1.0)/ R[ind].shape[0]
         ind = (R > disk_mesh.Rin) & ((R < disk_mesh.Rout))
-        self.params.maxvol = self.params.targetmass/dens[ind].min()
-        self.params.minvol = self.params.targetmass/dens[ind].max()
-
+        self.params.max_volume = self.params.reference_gas_part_mass/dens[ind].min()
+        self.params.min_volume = self.params.reference_gas_part_mass/dens[ind].max()
+        self.params.box_size = disk_mesh.BoxSize
     
         
     def load(self,R,phi,z,dens,vphi,vr,press,ids,BoxSize,adiabatic_gamma):
@@ -835,7 +826,7 @@ class snapshot():
 
 
         
-    def write_snapshot(self,disk,disk_mesh,filename="disk.dat.hdf5",time=0):
+    def write_snapshot(self,disk,disk_mesh,filename="./disk.dat.hdf5",time=0):
         
        
         
@@ -855,7 +846,9 @@ class snapshot():
         ws.write_block(f, "ID  ", 0, self.ids)
         ws.closefile(f)
         
-
+    def write_parameter_file(self,disk,disk_mesh,filename="./param.txt",time=0):
+        self.params.write(filename)
+        
 
 if __name__=="__main__":
 
