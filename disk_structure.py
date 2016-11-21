@@ -533,9 +533,9 @@ class disk_mesh():
                     #print Lx, Ly, Lz,R.max()/np.sqrt(2),z.max(),delta
                     if (Nlayers > 8): break
                     Nlayers+=1
-                    lmax,zetamax = max(R.max(),Radditional.max())/np.sqrt(2), max(z.max(),zadditional.max())
+                    lmax,zetamax = Radditional.max()/np.sqrt(2), zadditional.max()
                     Lx, Ly, Lz = min(1.6 * Lx,self.BoxSize), min(1.6 * Ly,self.BoxSize), min(3.8 * Lz,self.BoxSize)
-                    Lx_in, Ly_in, Lz_in = np.abs(R*np.cos(phi)).max(),np.abs(R*np.sin(phi)).max(),zetamax
+                    Lx_in, Ly_in, Lz_in = np.abs(Radditional*np.cos(phiadditional)).max(),np.abs(Radditional*np.sin(phiadditional)).max(),zetamax
 
                     xbox,ybox,zbox =  self.sample_fill_box(Lx_in,Lx,Ly_in,Ly,Lz_in,Lz,delta)
 
@@ -561,6 +561,7 @@ class disk_mesh():
                     z = np.append(z,zadditional)
 
             print "Added a total of %i extra points\n" % Radditional.shape[0]
+            print R.shape,phi.shape, z.shape,R.max(),np.abs(z).max()
             return R,phi,z
 
                              
@@ -692,14 +693,24 @@ class snapshot():
 
         self.load(R,phi,z,dens,vphi,vr,press,ids,disk_mesh.BoxSize,disk.adiabatic_gamma)
 
+        # Obtain target masses and allowed volumes
         self.params.reference_gas_part_mass = disk.compute_disk_mass(disk_mesh.Rin,disk_mesh.Rout)/disk_mesh.Ncells
         ind = (R < 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
         self.params.max_volume = 4.0/3*np.pi * disk_mesh.Rout**3 * (1.2**3-1.0)/ R[ind].shape[0]
         ind = (R > disk_mesh.Rin) & ((R < disk_mesh.Rout))
         self.params.max_volume = self.params.reference_gas_part_mass/dens[ind].min()
         self.params.min_volume = self.params.reference_gas_part_mass/dens[ind].max()
+
+        # Obtain the temperature balance far from the disk
+        press_background = press[dens == dens[R > 1.2 * disk_mesh.Rout].min()].mean()
+        dens_background = dens[dens == dens[R > 1.2 * disk_mesh.Rout].min()].mean()
+        self.params.limit_u_below_this_density = dens_background
+        self.params.limit_u_below_this_density_to_this_value = press_background / (disk.adiabatic_gamma - 1.0) / dens_background 
+        
+        # Assign the box size
         self.params.box_size = disk_mesh.BoxSize
-    
+
+        
         
     def load(self,R,phi,z,dens,vphi,vr,press,ids,BoxSize,adiabatic_gamma):
         
@@ -723,6 +734,7 @@ class snapshot():
         
         R,phi,z = disk_mesh.create(disk)
 
+        print R.shape, phi.shape, z.shape, R.max(), z.max()
         x = R*np.cos(phi)
         y = R*np.sin(phi)
         points = np.array([x,y,z]).T
@@ -732,6 +744,7 @@ class snapshot():
         R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
         #obtain density of cells
         dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
+        print "hold on there",x.shape,dens.shape,disk_mesh.Rout
         dens_cut = midplane_dens[-1]
         dens[dens < dens_cut] = dens_cut
         midplane_dens[midplane_dens < dens_cut] = dens_cut
@@ -744,13 +757,17 @@ class snapshot():
         
         #evaluate other quantities
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
-        radii, angular_frequency_sq = disk.evaluate_angular_freq_gravity(R1,R2,Nvals=600)
-        _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=600)
+        Nvals = 1200 # this number being large can be critical when steep pressure gradients are present
+        radii, angular_frequency_sq = disk.evaluate_angular_freq_gravity(R1,R2,Nvals=Nvals)
+        _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=Nvals)
         pressure_midplane = dens0_profile(radii) * sound_speed**2
-        _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=600)
-        _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2,Nvals=600)
+        _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=Nvals)
+        _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2,Nvals=Nvals)
         angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
 
+        plt.plot(radii,angular_frequency_sq)
+        plt.plot(radii,pressure_midplane_gradient/dens0_profile(radii)/radii)
+        plt.show()
         
         #interpolate mid-plane quantities
         vphi_profile = interp1d(radii,angular_frequency_midplane*radii,kind='linear')
@@ -764,17 +781,20 @@ class snapshot():
         press[ind] = dens[ind] * soundspeedsq_profile(R[ind])
         ind = (R >= disk_mesh.Rout) | (np.abs(z) > disk_mesh.zmax) 
         vphi[ind] = 0
-        dens[ind] = dens_cut/10000
+        dens[ind] = dens_cut/1000000
         press_cut = dens_cut * soundspeed(disk_mesh.Rout,disk.csnd0,disk.l,disk.csndR0)**2
         press[ind] = press_cut
-        ind = R< disk_mesh.Rin 
+        ind = R < disk_mesh.Rin 
         vphi[ind] = vphi[ind]*np.exp(-(disk_mesh.Rin-R[ind])**2/R[ind]**2)
-        dens[ind] = dens_cut/100000
+        dens[ind] = dens_cut/10000000
         ind = dens < dens_cut/100
         press[ind] = press_cut
 
+        # outside the disk proper, we want a hot, dilute medium
         print "DENS_CUT",dens_cut
         print "PRESS_CUT",press_cut
+        print "jaja",press[press < 0],dens[dens <0]
+        print press.shape, dens.shape, R.shape,phi.shape, z.shape
         
         vr = np.zeros(R.shape)
         ids = np.arange(1,R.shape[0]+1,1)
