@@ -117,6 +117,9 @@ class paramfile():
         self.min_volume = kwargs.get("min_volume")
         self.max_volume = kwargs.get("max_volume")
 
+        # Optional parameters
+        self.central_mass = kwargs.get("central_mass")
+        self.softening_central_mass = kwargs.get("softening_central_mass")
 
         # Set defaults ###############
 
@@ -411,7 +414,16 @@ class paramfile():
         f.write("RefinementCriterion\t %s\n" % self.refinement_criterion)
         f.write("DerefinementCriterion\t %s\n" % self.derefinement_criterion)
         f.write("MaxVolumeDiff\t\t %f\n" % self.max_volume_diff)
-        f.write("MinVolume\t\t %6.2e\n\n" % self.min_volume)
-        f.write("MaxVolume\t\t %6.2e\n\n" % self.max_volume)
+        f.write("MinVolume\t\t %6.2e\n" % self.min_volume)
+        f.write("MaxVolume\t\t %6.2e\n" % self.max_volume)
 
+        
+        # Optional parameters
+        f.write("\n%---- Other options\n")
+        if (self.central_mass is not None):
+            f.write("CentralMass\t\t %6.2e\n" % self.central_mass)
+        if (self.softening_central_mass is not None):
+            f.write("SofteningCentral\t %6.2e\n" % self.softening_central_mass)
+
+            
         f.close()
