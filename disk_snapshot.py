@@ -9,7 +9,7 @@ import scipy.integrate as integ
 
 from disk_structure import *
 from disk_parameter_files import *
-
+from disk_particles import *
 
 STAR_PARTTYPE = 4
 
@@ -21,14 +21,8 @@ class gas_data():
         self.utherm=kwargs.get("utherm")
         self.ids=kwargs.get("ids")
 
-class particle_data():
-    def __init__(self,*args,**kwargs):
-        self.pos=kwargs.get("pos")
-        self.vel=kwargs.get("vel")
-        self.mass=kwargs.get("mass")
-        self.ids=kwargs.get("ids")
-        
     
+
 
 class snapshot():
 
@@ -38,21 +32,34 @@ class snapshot():
         self.particle = particle_data()
         
         self.params = paramfile(init_cond_file="./disk.dat")
+
+        self.BoxSize = kwargs.get("BoxSize")
         
     def create(self,disk,disk_mesh):
 
+        self.BoxSize = disk_mesh.BoxSize
+        
         # Obtain the primitive quantities for all cells
         R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
 
         # Load them into the snapshot
-        self.load(R,phi,z,dens,None,vphi,vr,press,ids,disk_mesh.BoxSize,adiabatic_gamma=disk.adiabatic_gamma)
+        self.load(R,phi,z,dens,None,vphi,vr,press,ids,self.BoxSize,adiabatic_gamma=disk.adiabatic_gamma)
 
         # Check if there is a central particle
         if (disk.central_particle):
-            central_particle = particle_data(pos=np.array([0.5 * disk_mesh.BoxSize, 0.5 * disk_mesh.BoxSize, 0.5 * disk_mesh.BoxSize]).reshape(1,3),
-                                             vel=np.array([0.0,0.0,0.0]).reshape(1,3),
-                                             mass = disk.Mcentral,ids=[np.array([self.gas.ids.max()+1]).T])
-            self.add_particles(central_particle)
+            central_particle = particle_data()
+            print central_particle.pos
+            central_particle.add_particle(x = (0.5 * self.BoxSize),
+                                          y = (0.5 * self.BoxSize),
+                                          z = (0.5 * self.BoxSize),
+                                          vx=0,
+                                          vy=0,
+                                          vz=0,
+                                          m = disk.Mcentral, ID=(self.gas.ids.max()+1))
+            #central_particle = particle_data(pos=np.array([0.5 * self.BoxSize, 0.5 * self.BoxSize, 0.5 * self.BoxSize]).reshape(1,3),
+            #                                 vel=np.array([0.0,0.0,0.0]).reshape(1,3),
+            #                                 mass = disk.Mcentral,ids=[np.array([self.gas.ids.max()+1]).T])
+            self.load_particles(central_particle)
         
         # Obtain target masses and allowed volumes
         self.params.reference_gas_part_mass = disk.compute_disk_mass(disk_mesh.Rin,disk_mesh.Rout)/disk_mesh.Ncells
@@ -69,7 +76,7 @@ class snapshot():
         self.params.limit_u_below_this_density_to_this_value = press_background / (disk.adiabatic_gamma - 1.0) / dens_background 
         
         # Assign the box size
-        self.params.box_size = disk_mesh.BoxSize
+        self.params.box_size = self.BoxSize
 
         # Softening parameter
         if (disk.central_particle is False):
@@ -159,10 +166,6 @@ class snapshot():
             
         angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
             
-        plt.plot(radii,angular_frequency_sq)
-        plt.plot(radii,pressure_midplane_gradient/dens0_profile(radii)/radii)
-        plt.show()
-
         
         #interpolate mid-plane quantities
         vphi_profile = interp1d(radii,angular_frequency_midplane*radii,kind='linear')
@@ -204,9 +207,9 @@ class snapshot():
         cosphi,sinphi = np.cos(phi*np.pi/180.0),np.sin(phi*np.pi/180.0)
 
 
-        self.gas.pos[:,0]-= 0.5 * disk_mesh.BoxSize
-        self.gas.pos[:,1]-= 0.5 * disk_mesh.BoxSize
-        self.gas.pos[:,2]-= 0.5 * disk_mesh.BoxSize
+        self.gas.pos[:,0]-= 0.5 * self.BoxSize
+        self.gas.pos[:,1]-= 0.5 * self.BoxSize
+        self.gas.pos[:,2]-= 0.5 * self.BoxSize
         
         R = np.sqrt(self.gas.pos[:,0]**2+self.gas.pos[:,1]**2+self.gas.pos[:,2]**2)
         ind = R < 1.5 * disk_mesh.Rout 
@@ -221,9 +224,9 @@ class snapshot():
         self.gas.vel[ind,0],self.gas.vel[ind,1] = cosphi * self.gas.vel[ind,0] - sinphi * self.gas.vel[ind,1], \
                                 sinphi * self.gas.vel[ind,0] + cosphi * self.gas.vel[ind,1]
         
-        self.gas.pos[:,0]+= 0.5 * disk_mesh.BoxSize
-        self.gas.pos[:,1]+= 0.5 * disk_mesh.BoxSize
-        self.gas.pos[:,2]+= 0.5 * disk_mesh.BoxSize
+        self.gas.pos[:,0]+= 0.5 * self.BoxSize
+        self.gas.pos[:,1]+= 0.5 * self.BoxSize
+        self.gas.pos[:,2]+= 0.5 * self.BoxSize
 
     def extract(self,index):
         self.gas.pos=self.gas.pos[index,:]
@@ -240,14 +243,21 @@ class snapshot():
         self.gas.ids=np.append(self.gas.ids,snapshot.gas.ids)
         self.gas.ids[self.gas.ids > 0] = np.arange(1,1+self.gas.ids[self.gas.ids > 0].shape[0])
 
-    def add_particles(self,part_data):
-        self.particle.pos  = part_data.pos
+    def load_particles(self,part_data):
+        self.particle.pos  = np.add(part_data.pos,np.array([0.5 * self.BoxSize,0.5 * self.BoxSize,0.5 * self.BoxSize]))
         self.particle.vel  = part_data.vel
         self.particle.mass = part_data.mass
         self.particle.ids  = part_data.ids
 
+    def add_one_particle(self, x = 0.0, y = 0.0, z = 0.0, vx = 0.0, vy = 0.0, vz = 0.0, m = 0.0,
+                         a = None, e = None, I = None, g = None, h = None, l = None, ID = 0):
 
+        self.particle.add_particle(x,y,z,vx,vy,vz,m,a,e,I,g,h,l,ID)
 
+        # Correct locations
+        self.particle.center_of_mass_frame()
+        print self.particle.pos.shape
+        self.particle.pos  = np.add(self.particle.pos,np.array([0.5 * self.BoxSize,0.5 * self.BoxSize,0.5 * self.BoxSize]))
         
     def write_snapshot(self,disk,disk_mesh,filename="./disk.dat.hdf5",time=0):
         
@@ -266,7 +276,7 @@ class snapshot():
         npart[STAR_PARTTYPE] = Nparticle
         massarr=np.array([0,0,0,0,0,0], dtype="float64")
         header=ws.snapshot_header(npart=npart, nall=npart, massarr=massarr, time=time,
-                              boxsize=disk_mesh.BoxSize, double = np.array([1], dtype="int32"))
+                              boxsize=self.BoxSize, double = np.array([1], dtype="int32"))
         
         ws.writeheader(f, header)
         ws.write_block(f, "POS ", 0, self.gas.pos)
