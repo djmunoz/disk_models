@@ -250,10 +250,15 @@ class snapshot():
         self.particle.ids  = part_data.ids
 
     def add_one_particle(self, x = 0.0, y = 0.0, z = 0.0, vx = 0.0, vy = 0.0, vz = 0.0, m = 0.0,
-                         a = None, e = None, I = None, g = None, h = None, l = None, ID = 0):
+                         a = None, e = None, I = None, g = None, h = None, l = None):
 
-        self.particle.add_particle(x,y,z,vx,vy,vz,m,a,e,I,g,h,l,ID)
-
+        try:
+            idmax =  max(self.gas.ids.max(),self.particle.ids.max())
+        except ValueError:
+            idmax = self.gas.ids.max()
+        self.particle.add_particle(x=x,y=y,z=z,vx=vx,vy=vy,vz=vz,m=m,a=a,e=e,I=I,g=g,h=h,l=l,
+                                   ID=idmax+1)
+        
         # Correct locations
         self.particle.center_of_mass_frame()
         print self.particle.pos.shape

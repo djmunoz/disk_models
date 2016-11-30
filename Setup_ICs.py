@@ -8,7 +8,7 @@ import sys
 if __name__=="__main__":
 
     Ncells = 500000
-    Mdisk = 0.01
+    Mdisk = 0.3
     
     #DISK MODEL
     d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,

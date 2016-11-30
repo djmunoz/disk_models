@@ -302,7 +302,7 @@ class particle_data():
 
             
     def add_particle(self, x = 0.0, y = 0.0, z = 0.0, vx = 0.0, vy = 0.0, vz = 0.0, m = 0.0,
-                     a = None, e = None, I = None, g = None, h = None, l = None, ID = 0):
+                     a = None, e = None, I = None, g = None, h = None, l = None, ID = None):
 
         if (self.pos.shape[0] > 0):
             print self.pos.shape
