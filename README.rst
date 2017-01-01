@@ -24,9 +24,9 @@ You need to have git installed. In addition, you need the NumPy and SciPy Python
 
 That is all!
  
-----------------------------------------------------------------------------------------
+
 Basic usage
---------
+-----------
 
 To run these scripts and creat an HDF5 initial condition snapshot, follow the next steps:
 
