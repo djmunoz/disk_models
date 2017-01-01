@@ -34,47 +34,47 @@ a.     **Load module**
    
 .. code:: python
 
-   import disk_3d_models as d3d
+	  import disk_3d_models as d3d
 
 
 b. **Choose a density profile type**
 
-Choose a density profile type (see 'disk_density_profiles.py' for already implemented axisymmetric profiles),e.g., a Lynden-Bell - Pringel self-similar profile modified to have a central cavity:
+   Choose a density profile type (see 'disk_density_profiles.py' for already implemented axisymmetric profiles),e.g., a Lynden-Bell - Pringel self-similar profile modified to have a central cavity:
    
 .. code:: python
 	  
-   sigma_type='similarity_cavity'
+	  sigma_type='similarity_cavity'
 
 c. **Create disk model**
-
-Create the disk model under this profile type (other parameters included)
+   
+   Create the disk model under this profile type (other parameters included)
 
 .. code:: python
 
-   d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,R_cav=2.5,xi=3.1,Rout=15,adiabatic_gamma=1.00001)
+	  d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,R_cav=2.5,xi=3.1,Rout=15,adiabatic_gamma=1.00001)
 
 d. **Create mesh**
 
-Create the disk mesh data structure
+   Create the disk mesh data structure
    
 .. code:: python
 
-   mesh = d3d.disk_mesh(mesh_type="mc",Ncells=500000,fill_background=True, fill_center=True,fill_box=True,BoxSize=50)
+	  mesh = d3d.disk_mesh(mesh_type="mc",Ncells=500000,fill_background=True, fill_center=True,fill_box=True,BoxSize=50)
 
 e. **Create the initial snapshot**
 
-Create an instance of the snapshot() structure, and generate a model snapshot
+   Create an instance of the snapshot() structure, and generate a model snapshot
    
 .. code:: python
 	  
-   s = d3d.snapshot() s.create(d,mesh)
+	  s = d3d.snapshot() s.create(d,mesh)
 	  
 f. **Save to disk**
 
-Write the snapshot to a file
+   Write the snapshot to a file
    
 
 .. code:: python
 	  
-   s.write_snapshot(d,mesh,filename="disk.dat.hdf5",time=0)
+	  s.write_snapshot(d,mesh,filename="disk.dat.hdf5",time=0)
 
