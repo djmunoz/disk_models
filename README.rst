@@ -1,7 +1,7 @@
-disk_3d_models 
-
+disk_3d_models
+==============
 Sets of routines to setup three-dimensional models of accretion disks
-==================================================
+=====================================================================
 
 
 Overview
@@ -24,8 +24,8 @@ You need to have git installed. In addition, you need the NumPy and SciPy Python
 
 That is all!
  
-
-Example
+----------------------------------------------------------------------------------------
+Basic usage
 --------
 
 To run these scripts and creat an HDF5 initial condition snapshot, follow the next steps:
