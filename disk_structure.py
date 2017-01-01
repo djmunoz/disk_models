@@ -303,7 +303,6 @@ class disk(object):
         radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
         #fix the bins a bit
         dRin = radial_bins[1]-radial_bins[0]
-        print radial_bins[1]
         radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/30,radial_bins[1],dRin/30),radial_bins[1:]))
         
         bin_inds=np.digitize(Rsamples,radial_bins)
@@ -514,6 +513,7 @@ class disk_mesh():
 
             
             if (self.fill_box == True):
+                print "Filling computational box of side half-length",self.BoxSize/2
                 zmax0 = zmax
                 Rmax0 = Rmax
                 Nlayers = 0
@@ -522,7 +522,7 @@ class disk_mesh():
                 xbox,ybox,zbox =  self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 rbox = np.sqrt(xbox**2+ybox**2)
                 ind = (rbox > Rmax0) | (np.abs(zbox) > zmax0)
-                print "....adding %i additional mesh-generating points" % (rbox[ind].shape[0])
+                print "....adding %i additional mesh-generating points out to x=+-%f" % (rbox[ind].shape[0],xbox.max())
                 Radditional = np.append(Radditional,rbox[ind])
                 phiadditional = np.append(phiadditional,np.arctan2(ybox[ind],xbox[ind]))
                 zadditional=np.append(zadditional,zbox[ind])
@@ -540,7 +540,7 @@ class disk_mesh():
 
                     xbox,ybox,zbox =  self.sample_fill_box(Lx_in,Lx,Ly_in,Ly,Lz_in,Lz,delta)
 
-                    print "....adding %i additional mesh-generating points" % (xbox.shape[0])
+                    print "....adding %i additional mesh-generating points out to x=+-%f" % (xbox.shape[0],xbox.max())
                     Radditional = np.append(Radditional,np.sqrt(xbox**2+ybox**2))
                     phiadditional = np.append(phiadditional,np.arctan2(ybox,xbox))
                     zadditional=np.append(zadditional,zbox)
@@ -548,6 +548,7 @@ class disk_mesh():
                     delta  = min(max(Lx,Lz)*1.0/16*Nlayers,0.6*min(Lx-Lx_in,Lz-Lz_in))
 
             if (self.fill_background | self.fill_center | self.fill_box):
+
                 # Check if we added TOO MANY additional mesh points
                 if (Radditional.shape[0] > self.max_fill_mesh_points):
                     print "...removing excessive extra points"
@@ -557,9 +558,9 @@ class disk_mesh():
                     phiadditional = phiadditional[ind]
                     zadditional = zadditional[ind]
 
-                    R = np.append(R,Radditional)
-                    phi = np.append(phi,phiadditional)
-                    z = np.append(z,zadditional)
+                R = np.append(R,Radditional)
+                phi = np.append(phi,phiadditional)
+                z = np.append(z,zadditional)
 
             print "Added a total of %i extra points\n" % Radditional.shape[0]
             return R,phi,z

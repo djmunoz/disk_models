@@ -349,13 +349,9 @@ class particle_data():
                             (self.pos[:,1]- poscm[1])**2+
                             (self.pos[:,2]- poscm[2])**2)
         
-        print "hehe"
-        print a
-        print distances,mcm,poscm
         
         # check if the new particle is the most distant one
         if np.all(distances < a) | (len(self.pos) == 1):
-            print "haha"
             mu = G * (mcm + m)
             x,y,z,vx,vy,vz =  orbit(a*(1-e),e,I,g,h,l,mu)
             print self.pos

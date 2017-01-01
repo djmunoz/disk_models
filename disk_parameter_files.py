@@ -120,7 +120,8 @@ class paramfile():
         # Optional parameters
         self.central_mass = kwargs.get("central_mass")
         self.softening_central_mass = kwargs.get("softening_central_mass")
-
+        self.iso_sound_speed = kwargs.get("iso_sound_speed")
+        
         # Set defaults ###############
 
         if (self.init_cond_file is None):
@@ -424,6 +425,12 @@ class paramfile():
             f.write("CentralMass\t\t %6.2e\n" % self.central_mass)
         if (self.softening_central_mass is not None):
             f.write("SofteningCentral\t %6.2e\n" % self.softening_central_mass)
+
+        print self.iso_sound_speed
+        if (self.iso_sound_speed is not None):
+            f.write("IsoSoundSpeed\t %6.2e\n" % self.iso_sound_speed)
+
+        
 
             
         f.close()

@@ -41,14 +41,13 @@ class snapshot():
         
         # Obtain the primitive quantities for all cells
         R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
-
+        
         # Load them into the snapshot
         self.load(R,phi,z,dens,None,vphi,vr,press,ids,self.BoxSize,adiabatic_gamma=disk.adiabatic_gamma)
 
         # Check if there is a central particle
         if (disk.central_particle):
             central_particle = particle_data()
-            print central_particle.pos
             central_particle.add_particle(x = (0.5 * self.BoxSize),
                                           y = (0.5 * self.BoxSize),
                                           z = (0.5 * self.BoxSize),
@@ -63,7 +62,13 @@ class snapshot():
         
         # Obtain target masses and allowed volumes
         self.params.reference_gas_part_mass = disk.compute_disk_mass(disk_mesh.Rin,disk_mesh.Rout)/disk_mesh.Ncells
-        ind = (R < 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
+
+        ff = 1.0
+        ind = (R < ff * 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
+        while (R[ind].shape[0] < 10):
+            ind = (R < ff * 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
+            ff*=1.05
+            
         self.params.max_volume = 4.0/3*np.pi * disk_mesh.Rout**3 * (1.2**3-1.0)/ R[ind].shape[0]
         ind = (R > disk_mesh.Rin) & ((R < disk_mesh.Rout))
         self.params.max_volume = self.params.reference_gas_part_mass/dens[ind].min()
@@ -84,21 +89,25 @@ class snapshot():
             self.params.softening_central_mass = disk.Mcentral_soft
         else:
             if (STAR_PARTTYPE == 1):
-                self.softening_type_of_parttype_1 = disk.Mcentral_soft
-                self.softening_comoving_type_1 = disk.Mcentral_soft
-                self.softening_max_phys_type_1 = disk.Mcentral_soft
+                self.params.softening_type_of_parttype_1 = disk.Mcentral_soft
+                self.params.softening_comoving_type_1 = disk.Mcentral_soft
+                self.params.softening_max_phys_type_1 = disk.Mcentral_soft
             if (STAR_PARTTYPE == 2):
-                self.softening_type_of_parttype_2 = disk.Mcentral_soft
-                self.softening_comoving_type_2 = disk.Mcentral_soft
-                self.softening_max_phys_type_2 = disk.Mcentral_soft
+                self.params.softening_type_of_parttype_2 = disk.Mcentral_soft
+                self.params.softening_comoving_type_2 = disk.Mcentral_soft
+                self.params.softening_max_phys_type_2 = disk.Mcentral_soft
             if (STAR_PARTTYPE == 3):
-                self.softening_type_of_parttype_3 = disk.Mcentral_soft
-                self.softening_comoving_type_3 = disk.Mcentral_soft
-                self.softening_max_phys_type_3 = disk.Mcentral_soft
+                self.params.softening_type_of_parttype_3 = disk.Mcentral_soft
+                self.params.softening_comoving_type_3 = disk.Mcentral_soft
+                self.params.softening_max_phys_type_3 = disk.Mcentral_soft
             if (STAR_PARTTYPE == 4):
-                self.softening_type_of_parttype_4 = disk.Mcentral_soft
-                self.softening_comoving_type_4 = disk.Mcentral_soft
-                self.softening_max_phys_type_4 = disk.Mcentral_soft   
+                self.params.softening_type_of_parttype_4 = disk.Mcentral_soft
+                self.params.softening_comoving_type_4 = disk.Mcentral_soft
+                self.params.softening_max_phys_type_4 = disk.Mcentral_soft
+
+        # Other variable parameters
+        if (disk.l < 1.e-2):
+            self.params.iso_sound_speed = disk.csnd0
                 
     def load(self,R,phi,z,dens,mass,vphi,vr,press,ids,BoxSize,particle_type=0,adiabatic_gamma=1.4):
         
@@ -128,7 +137,7 @@ class snapshot():
     def assign_primitive_variables(self,disk,disk_mesh):
         
         R,phi,z = disk_mesh.create(disk)
-
+        
         x = R*np.cos(phi)
         y = R*np.sin(phi)
         points = np.array([x,y,z]).T
@@ -139,12 +148,14 @@ class snapshot():
         #obtain density of cells
         dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
         dens_cut = midplane_dens[-1]
+        radii = np.append(radii,R2)
+        midplane_dens = np.append(midplane_dens,dens_cut)
         dens[dens < dens_cut] = dens_cut
         midplane_dens[midplane_dens < dens_cut] = dens_cut
         #window_length = 20
         #weights = np.exp(np.linspace(-1., 0., window_length))
         #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
-        dens0_profile =  interp1d(radii,midplane_dens,kind='linear')
+        dens0_profile =  interp1d(radii,midplane_dens,kind='linear')#,fill_value='extrapolate')
 
         
         #evaluate other quantities
@@ -160,30 +171,35 @@ class snapshot():
             if np.all((angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii) > 0):
                 break
             else:
-                Nvals = int(0.98 * (Nvals-1))
-            print "haha"
-
+                R1,R2 = 1.0001 * R1, 0.999 * R2
+                Nvals = int(0.999 * (Nvals-1))
+            if (Nvals < 500):
+                print "Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again"
+                exit()
+                    
             
         angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
             
+        #update mesh radial limits
+        disk_mesh.Rin, disk_mesh.Rout = radii.min(),radii.max()
         
         #interpolate mid-plane quantities
         vphi_profile = interp1d(radii,angular_frequency_midplane*radii,kind='linear')
         soundspeedsq_profile = interp1d(radii,sound_speed**2,kind='linear')
         soundspeedsq_gradient_profile = interp1d(radii,soundspeed_sq_gradient,kind='linear')
 
-        # primitive variables
+        # primitive variables inside the disk
+        ind_in = (R > disk_mesh.Rin) & (R < disk_mesh.Rout) & (np.abs(z) < disk_mesh.zmax) 
         vphi, press = np.zeros(R.shape),np.zeros(R.shape)
-        ind = (R < disk_mesh.Rout) & (np.abs(z) < disk_mesh.zmax) 
-        vphi[ind] = vphi_profile(R[ind]) -  soundspeedsq_gradient_profile(R[ind]) * np.log(dens[ind]/dens0_profile(R[ind]))
-        press[ind] = dens[ind] * soundspeedsq_profile(R[ind])
+        vphi[ind_in] = vphi_profile(R[ind_in]) -  soundspeedsq_gradient_profile(R[ind_in]) * np.log(dens[ind_in]/dens0_profile(R[ind_in]))
+        press[ind_in] = dens[ind_in] * soundspeedsq_profile(R[ind_in])
 
         # behavior outside the disk
-        ind = (R >= disk_mesh.Rout) | (np.abs(z) > disk_mesh.zmax) 
-        vphi[ind] = 0
-        dens[ind] = dens_cut/1000000
+        ind_out = (R >= disk_mesh.Rout) | (np.abs(z) > disk_mesh.zmax) 
+        vphi[ind_out] = 0
+        dens[ind_out] = dens_cut/1000000
         press_cut = dens_cut * soundspeed(disk_mesh.Rout,disk.csnd0,disk.l,disk.csndR0)**2
-        press[ind] = press_cut
+        press[ind_out] = press_cut
 
         ind = R < disk_mesh.Rin 
         vphi[ind] = vphi[ind]*np.exp(-(disk_mesh.Rin-R[ind])**2/R[ind]**2)
@@ -261,7 +277,6 @@ class snapshot():
         
         # Correct locations
         self.particle.center_of_mass_frame()
-        print self.particle.pos.shape
         self.particle.pos  = np.add(self.particle.pos,np.array([0.5 * self.BoxSize,0.5 * self.BoxSize,0.5 * self.BoxSize]))
         
     def write_snapshot(self,disk,disk_mesh,filename="./disk.dat.hdf5",time=0):

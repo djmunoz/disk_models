@@ -11,8 +11,9 @@ if __name__=="__main__":
     Mdisk = 0.3
     
     #DISK MODEL
-    d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,
-                 R_cav=2.5,xi=3.1,p=1.0,#adiabatic_gamma=1.00001,
+    d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.05,l=0.000001,
+                 R_cav=2.5,xi=3.1,p=1.0,
+                 #adiabatic_gamma=1.00001,
                  adiabatic_gamma = 1.4,
                  self_gravity = False,
                  central_particle = False)
