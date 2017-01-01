@@ -6,12 +6,13 @@ disk_3d_models - Sets of routines to setup three-dimensional models of accretion
 Overview
 --------
 
-KozaiPy is a Python package for the integration of the secular equations of motion of few-body hierarchical systems.
+
+Sets of routines to setup three-dimensional models of accretion disks in hydrostatic and centrifugal equilibrium.
 
 Installation
---------
+------------
 
-You need to have git installed. In addition, you need the NumPy and SciPy Python packages.
+You need to have git installed. In addition, you need the NumPy, SciPy and PyTables Python packages.
 
 .. code::
    
