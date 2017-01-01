@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import snapHDF5 as ws
+from hdf5 import snapHDF5 as ws
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz

@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.random as rd
-import snapHDF5 as ws
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz
