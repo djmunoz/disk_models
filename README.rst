@@ -16,7 +16,7 @@ You need to have git installed. In addition, you need the NumPy and SciPy Python
 
 .. code::
    
-   git clone https://github.com/djmunoz/disk_3d_models.gitf
+   git clone https://github.com/djmunoz/disk_3d_models.git
 
    cd disk_3d_models
    
@@ -30,7 +30,7 @@ Example
 
 To run these scripts and creat an HDF5 initial condition snapshot, follow the next steps:
 
-a. **Load module**
+a.     **Load module**
    
 .. code:: python
 
@@ -47,7 +47,7 @@ Choose a density profile type (see 'disk_density_profiles.py' for already implem
 
 c. **Create disk model**
 
-   Create the disk model under this profile type (other parameters included)
+Create the disk model under this profile type (other parameters included)
 
 .. code:: python
 
