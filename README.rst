@@ -63,7 +63,8 @@ e. **Create the initial snapshot:**
    
 .. code:: python
 	  
-	  s = d3d.snapshot() s.create(d,mesh)
+	  s = d3d.snapshot()
+	  s.create(d,mesh)
 	  
 f. **Save to disk:**
    Write the snapshot to a file
