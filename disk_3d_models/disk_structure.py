@@ -164,6 +164,13 @@ class disk(object):
         return rvals, Omega_sq + self.evaluate_pressure_gradient(Rin,Rout,Nvals,scale=scale)[1] / \
             self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]/ rvals
 
+    def evaluate_toomreQ(self,Rin,Rout,Nvals=1000,scale='log'):
+        rvals, csnd = self.evaluate_soundspeed(Rin,Rout,Nvals,scale)
+        _, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale)
+        _, Sigma = self.evaluate_sigma(Rin,Rout,Nvals,scale)
+
+        return rvals, csnd * np.sqrt(Omega_sq) / Sigma / np.pi / self.G
+        
     def evaluate_radial_velocity(self,Rin,Rout,Nvals=1000,scale='log'):
         return self.evaluate_radial_velocity_viscous(Rin,Rout,Nvals,scale=scale)
 
