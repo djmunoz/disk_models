@@ -105,4 +105,4 @@ class similarity_cavity_disk(object):
             self.floor = 0.0
             
     def evaluate(self,R):
-        return max(self.floor,similarity_cavity_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_cav,self.xi))
+        return np.maximum(self.floor,similarity_cavity_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_cav,self.xi))
