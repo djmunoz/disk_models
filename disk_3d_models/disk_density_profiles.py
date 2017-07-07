@@ -24,8 +24,8 @@ class powerlaw_disk(object):
         self.sigma0 = kwargs.get("sigma0")
         self.p = kwargs.get("p")
         self.R0 = kwargs.get("R0")
-
-
+        self.floor = kwargs.get("floor") 
+        
         #set default values
         if (self.sigma0 is None):
             self.sigma0 = 1.0
@@ -33,16 +33,19 @@ class powerlaw_disk(object):
             self.p = 1.0
         if (self.R0 is None):
             self.R0 = 1.0
+        if (self.floor is None):
+            self.floor = 0.0
 
     def evaluate(self,R):
-        return powerlaw_sigma(R,self.sigma0,self.p,self.R0)
+        return max(self.floor,powerlaw_sigma(R,self.sigma0,self.p,self.R0))
 
 class similarity_disk(object):
     def __init__(self, *args, **kwargs):
         self.sigma0 = kwargs.get("sigma0")
         self.gamma = kwargs.get("gamma")
         self.Rc = kwargs.get("Rc")
-
+        self.floor = kwargs.get("floor") 
+        
         #set default values
         if (self.sigma0 is None):
             self.sigma0 = 1.0
@@ -52,7 +55,7 @@ class similarity_disk(object):
             self.Rc = 1.0
 
     def evaluate(self,R):
-        return similarity_sigma(R,self.sigma0,self.gamma,self.Rc)
+        return max(self.floor,similarity_sigma(R,self.sigma0,self.gamma,self.Rc))
 
 class powerlaw_cavity_disk(object):
     def __init__(self, *args, **kwargs):
@@ -85,7 +88,7 @@ class similarity_cavity_disk(object):
         self.Rc = kwargs.get("Rc")
         self.R_cav = kwargs.get("R_cav")
         self.xi = kwargs.get("xi")
-
+        self.floor = kwargs.get("floor") 
         
         #set default values
         if (self.sigma0 is None):
@@ -98,6 +101,8 @@ class similarity_cavity_disk(object):
             self.R_cav = 1.0
         if (self.xi is None):
             self.xi = 4.0
-
+        if (self.floor is None):
+            self.floor = 0.0
+            
     def evaluate(self,R):
-        return similarity_cavity_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_cav,self.xi)
+        return max(self.floor,similarity_cavity_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_cav,self.xi))
