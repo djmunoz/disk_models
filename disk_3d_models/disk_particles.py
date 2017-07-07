@@ -11,7 +11,7 @@ def elements(x,y,z,vx,vy,vz,mu):
   V2 = vx**2 + vy**2 + vz**2
   RtimesRdot = x * vx + y * vy + z * vz
   hx = y * vz - z * vy
-  hy = sz * vx - x * vz
+  hy = z * vx - x * vz
   hz = x * vy - y * vx
   h2 = hx**2 + hy**2 + hz**2
   if (RtimesRdot > 0 ):
