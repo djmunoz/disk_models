@@ -15,6 +15,39 @@ from disk_snapshot import *
 
 rd.seed(42)
 
+
+def SplineProfile(R,h):
+  r2 = R*R
+  if(R >= h):
+    wp = - 1.0 / R
+  else:
+    h_inv = 1.0 / h
+    h3_inv = h_inv * h_inv * h_inv
+    u = R * h_inv
+    if(u < 0.5):
+      wp =  h_inv * (-2.8 + u * u * (5.333333333333 + u * u * (6.4 * u - 9.6)))
+    else:
+      wp = h_inv * (-3.2 + 0.066666666667 / u + u * u * (10.666666666667 + u * (-16.0 + u * (9.6 - 2.133333333333 * u))))
+      
+  return -wp
+  
+def SplineDerivative(R,h):
+  r2 = R * R
+  fac = 0.0
+  if(R >= h):
+    fac = 1.0 / (r2 * R)
+  else:
+    h_inv = 1.0 / h
+    h3_inv = h_inv * h_inv * h_inv
+    u = R * h_inv
+    if(u < 0.5):
+      fac = h3_inv * (10.666666666667 + u * u * (32.0 * u - 38.4))
+    else:
+      fac = h3_inv * (21.333333333333 - 48.0 * u + 38.4 * u * u - 10.666666666667 * u * u * u - 0.066666666667 / \
+                      (u * u * u))
+      
+  return fac
+
 class disk(object):
     def __init__(self, *args, **kwargs):
         #units
@@ -146,7 +179,7 @@ class disk(object):
 
     def evaluate_angular_freq_central_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
+        Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2)
         return rvals, Omega_sq
 
     def evaluate_angular_freq_external_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
@@ -176,7 +209,7 @@ class disk(object):
 
     def evaluate_radial_velocity_viscous(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        Omega = np.sqrt(self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2))
+        Omega = np.sqrt(self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2))
         sigma = (self.evaluate_sigma(Rin,Rout,Nvals,scale)[1])
         _, dOmegadR = self.evaluate_radial_gradient(Omega,Rin,Rout,Nvals,scale=scale)
         
