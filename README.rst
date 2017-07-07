@@ -26,6 +26,14 @@ You need to have git installed. In addition, you need the NumPy, SciPy and PyTab
    
    sudo python setup.py install
 
+If you do not have root permission, you might have to do
+
+.. code::
+   
+   python setup.py install --user
+
+To install the package in your :code:`$HOME/.local/`
+   
 That is all!
 
 
