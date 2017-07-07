@@ -18,6 +18,7 @@ class gas_data():
         self.pos=kwargs.get("pos")
         self.vel=kwargs.get("vel")
         self.dens=kwargs.get("dens")
+        self.press=kwargs.get("press")
         self.utherm=kwargs.get("utherm")
         self.ids=kwargs.get("ids")
 
@@ -121,6 +122,7 @@ class snapshot():
 
         if (particle_type == 0):
             self.gas.dens = dens
+            self.gas.press = press
             self.gas.pos = np.array([x,y,z]).T
             self.gas.vel = np.array([vx,vy,vz]).T
             self.gas.utherm = press/self.gas.dens/(adiabatic_gamma - 1)
