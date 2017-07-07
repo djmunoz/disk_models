@@ -11,7 +11,7 @@ setup(
     author='Diego J. Munoz',
     author_email = 'diego.munoz.anguita@gmail.com',
     url='https://github.com/',
-    packages=['disk_3d_models','hdf5'],
+    packages=['disk_3d_models','disk_3d_models.disk_hdf5'],
     description='Setup three-dimensional models of accretion disks in hydrostatic and centrifugal equilibrium',
     install_requires = ['numpy','scipy','tables'],
 )
