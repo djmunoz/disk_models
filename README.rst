@@ -27,7 +27,12 @@ You need to have git installed. In addition, you need the NumPy, SciPy and PyTab
    sudo python setup.py install
 
 That is all!
- 
+
+
+.. class:: no-web
+           
+   .. image:: example_figures/fragmentation.png
+
 
 Basic usage
 -----------
