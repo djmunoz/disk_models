@@ -2,6 +2,10 @@
 disk_3d_models - Sets of routines to setup three-dimensional models of accretion disks
 **************************************************************************************
 
+.. class:: no-web
+           
+   .. image:: example_figures/disk_mesh.png
+
 
 Overview
 --------
