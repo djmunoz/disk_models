@@ -166,6 +166,9 @@ class snapshot():
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
         while (True):
             radii, angular_frequency_sq = disk.evaluate_angular_freq_gravity(R1,R2,Nvals=Nvals,scale=scale)
+            plt.plot(radii,radii*np.sqrt(angular_frequency_sq))
+            plt.plot(radii,1/np.sqrt(radii))
+            plt.show()
             _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=Nvals,scale=scale)
             pressure_midplane = dens0_profile(radii) * sound_speed**2
             _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=Nvals,scale=scale)
