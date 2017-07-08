@@ -197,7 +197,7 @@ class snapshot():
         press[ind_in] = dens[ind_in] * soundspeedsq_profile(R[ind_in])
 
         # behavior outside the disk
-        ind_out = (R >= disk_mesh.Rout) | (np.abs(z) > disk_mesh.zmax) 
+        ind_out = (R >= disk_mesh.Rout) | (np.abs(z) >= disk_mesh.zmax) | (R <= disk_mesh.Rin) 
         vphi[ind_out] = 0
         dens[ind_out] = dens_cut/1000000
         press_cut = dens_cut * soundspeed(disk_mesh.Rout,disk.csnd0,disk.l,disk.csndR0)**2
