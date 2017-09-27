@@ -46,7 +46,7 @@ def SplineDerivative(R,h):
       
   return fac
 
-class disk(object):
+class disk3d(object):
     def __init__(self, *args, **kwargs):
         #units
         self.G =  kwargs.get("G")
@@ -367,7 +367,7 @@ class disk(object):
         return dens,np.array(radii),np.array(mid_plane)
         
     
-class disk_mesh():
+class disk_mesh3d():
     def __init__(self, *args, **kwargs):
 
         self.mesh_type=kwargs.get("mesh_type")
