@@ -1,7 +1,7 @@
 Creating a disk model in 2D
 ------------------------------
 
-First, we load the code::`disk_models` module.
+First, we load the :code:`disk_models` module.
 
 
 .. code:: python
