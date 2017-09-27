@@ -6,12 +6,12 @@ import sys
 
 
 setup(
-    name='disk_3d_models',
+    name='disk_models',
     version="0.0.1",
     author='Diego J. Munoz',
     author_email = 'diego.munoz.anguita@gmail.com',
     url='https://github.com/',
-    packages=['disk_3d_models','disk_3d_models.disk_hdf5'],
+    packages=['disk_models','disk_models.disk_hdf5'],
     description='Setup three-dimensional models of accretion disks in hydrostatic and centrifugal equilibrium',
     install_requires = ['numpy','scipy','tables'],
 )
