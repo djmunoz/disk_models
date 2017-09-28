@@ -19,7 +19,7 @@ Now we create the disk snapshot
 	  
 	  sigma_type='powerlaw_cavity'
 	  d = dm.disk2d(sigma_type=sigma_type,csnd0=0.05,p=0.5,l=1.0,R_cav=2.5,xi=3.1,Rout=70,adiabatic_gamma=1.0,boundary_out = True)
-	  mesh = dm.disk_mesh2d(mesh_type="polar",Ncells=500000,fill_background=True, fill_center=True,fill_box=True,BoxSize=160)
+	  mesh = dm.disk_mesh2d(mesh_type="polar",Nphi=380,NR=512,fill_center=True,fill_box=True,BoxSize=160)
 	  
 	  s = dm.snapshot()
 	  s.create(d,mesh)
