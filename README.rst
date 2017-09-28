@@ -1,5 +1,5 @@
 **************************************************************************************
-disk_3d_models - Sets of routines to setup three-dimensional models of accretion disks
+disk_models - Sets of routines to setup three-dimensional models of accretion disks
 **************************************************************************************
 
 .. class:: no-web
@@ -20,9 +20,9 @@ You need to have git installed. In addition, you need the NumPy, SciPy and PyTab
 
 .. code::
    
-   git clone https://github.com/djmunoz/disk_3d_models.git
+   git clone https://github.com/djmunoz/disk_models.git
 
-   cd disk_3d_models
+   cd disk_models
    
    sudo python setup.py install
 
@@ -51,7 +51,7 @@ a.     **Load module:**
    
 .. code:: python
 
-	  import disk_3d_models as d3d
+	  import disk_models as dm
 
 
 b. **Choose a density profile type:**
@@ -66,21 +66,21 @@ c. **Create disk model:**
 
 .. code:: python
 
-	  d = d3d.disk(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,R_cav=2.5,xi=3.1,Rout=15,adiabatic_gamma=1.00001)
+	  d = dm.disk3d(sigma_type="similarity_cavity",csnd0=0.12,l=1.0,R_cav=2.5,xi=3.1,Rout=15,adiabatic_gamma=1.00001)
 
 d. **Create mesh:**
    Create the disk mesh data structure
    
 .. code:: python
 
-	  mesh = d3d.disk_mesh(mesh_type="mc",Ncells=500000,fill_background=True, fill_center=True,fill_box=True,BoxSize=50)
+	  mesh = dm.disk_mesh3d(mesh_type="mc",Ncells=500000,fill_background=True, fill_center=True,fill_box=True,BoxSize=50)
 
 e. **Create the initial snapshot:**
    Create an instance of the snapshot() structure, and generate a model snapshot
    
 .. code:: python
 	  
-	  s = d3d.snapshot()
+	  s = dm.snapshot()
 	  s.create(d,mesh)
 	  
 f. **Save to disk:**
