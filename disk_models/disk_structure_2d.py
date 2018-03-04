@@ -3,19 +3,28 @@ import matplotlib.pyplot as plt
 import numpy.random as rd
 import snapHDF5 as ws
 from scipy.interpolate import interp1d
+from math import factorial
 
 from disk_density_profiles import *
 from disk_external_potentials import *
 from disk_other_functions import *
 from disk_snapshot import *
 
+
+def soundspeed(R,csnd0,l,R0):
+    return csnd0 * (R/R0)**(-l*0.5)
+
+
 class disk2d(object):
     def __init__(self, *args, **kwargs):
         #define the properties of the axi-symmetric disk model
         self.sigma_type = kwargs.get("sigma_type")
-        self.sigma_disk = None
+        self.sigma_disk =  None
+        self.sigma_function =  kwargs.get("sigma_function")
         self.sigma_cut = kwargs.get("sigma_cut")
-
+        self.sigma_back = kwargs.get("sigma_back")
+        self.sigma_floor = kwargs.get("sigma_floor")
+        
         #Temperature profile properties
         self.csndR0 = kwargs.get("csndR0") #reference radius
         self.csnd0 = kwargs.get("csnd0") # soundspeed scaling
@@ -30,6 +39,7 @@ class disk2d(object):
 
         #central object
         self.Mcentral = kwargs.get("Mcentral")
+        self.Mcentral_soft = kwargs.get("Mcentral_soft")
         self.quadrupole_correction =  kwargs.get("quadrupole_correction")
 
         #corrections to density profile by a gap
@@ -40,12 +50,16 @@ class disk2d(object):
             self.gap_depth = kwargs.get("gap_depth")
             self.gap_steep = kwargs.get("gap_steep")
 
+        # other properties
+        self.self_gravity = kwargs.get("self_gravity")
+        self.central_particle = kwargs.get("central_particle")
 
+        self.constant_accretion = kwargs.get("constant_accretion")
 
-            
+        # axisymmetric perturbations
+        self.density_perturbation_function =  kwargs.get("density_perturbation_function")
+        
         #set defaults ###############################
-        if (self.sigma_type is None):
-            self.sigma_type="powerlaw"
         if (self.l is None):
             self.l = 1.0
         if (self.csnd0 is None):
@@ -58,6 +72,8 @@ class disk2d(object):
             self.alphacoeff = 0.01
         if (self.Mcentral is None):
             self.Mcentral = 1.0
+        if (self.Mcentral_soft is None):
+            self.Mcentral_soft = 0.0
         if (self.quadrupole_correction is None):
             self.quadrupole_correction = 0
             
@@ -80,10 +96,46 @@ class disk2d(object):
             self.sigma_disk = powerlaw_cavity_disk(**kwargs)
             if (self.csndR0 is None):
                 self.csndR0 = self.sigma_disk.R_cav
+        
+        if (self.sigma_type == "similarity_cavity"):
+            self.sigma_disk = similarity_cavity_disk(**kwargs)
+            if (self.csndR0 is None):
+                self.csndR0 = self.sigma_disk.Rc
 
+        if (self.sigma_type is None):
+            if (self.sigma_function is not None):
+                if not callable(self.sigma_function):
+                    print "ERROR: No valid surface density profile provided."
+                    exit()
+                    
+        if (self.self_gravity is None):
+            self.self_gravity = False
+
+        if (self.constant_accretion is None):
+            self.constant_accretion = False            
+
+        if (self.density_perturbation_function is None):
+            self.density_perturbation_function = None
+                
         if (self.sigma_cut is None):
-            self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
+            try:
+                self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
+            except AttributeError:
+                self.sigma_cut = None
 
+        if (self.sigma_back is None):
+            try:
+                self.sigma_back = self.sigma_disk.sigma0 * 1e-7
+            except AttributeError:
+                self.sigma_back = None
+                
+        if (self.sigma_floor is None):
+            try:
+                self.sigma_floor = self.sigma_disk.sigma0 * 1e-7
+            except AttributeError:
+                self.sigma_floor = None
+                
+                
         if (self.add_gap is None):
             self.add_gap = False
         if (self.add_gap is True):
@@ -96,16 +148,24 @@ class disk2d(object):
             if (self.gap_steep is None):
                 self.gap_steep = 4
 
+
+    def sigma_vals(self,rvals):
+        if (self.sigma_function is not None) & callable(self.sigma_function):
+            sigma = np.vectorize(self.sigma_function)(rvals)
+        else:
+            sigma = self.sigma_disk.evaluate(rvals)
+
+        return sigma
             
     def evaluate_sigma(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        sigma = self.sigma_disk.evaluate(rvals)
-
+        sigma = self.sigma_vals(rvals)
         if (self.add_gap):
-            print self.gap_center,self.gap_width,self.gap_depth,self.gap_steep
             sigma = sigma * gap_profile(rvals,self.gap_center,self.gap_width,self.gap_depth,self.gap_steep)
-            
-        sigma[sigma < self.sigma_cut] = self.sigma_cut
+        try:
+            sigma[sigma < self.sigma_floor] = self.sigma_floor
+        except TypeError:
+            None
         return rvals,sigma
     
     def evaluate_soundspeed(self,Rin,Rout,Nvals=1000,scale='log'):
@@ -128,15 +188,57 @@ class disk2d(object):
         _, dPdR = self.evaluate_radial_gradient(press,Rin,Rout,Nvals,scale=scale)
         return rvals,dPdR
 
+    def evaluate_angular_freq_self_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
+        rvals, mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
+        _ ,sigma = self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)
+        '''
+        # First guess at the squared angular velocity
+        vcircsquared_0 = mvals/rvals
+        delta_vcirc,delta_vcirc_old  = 0.0, 1.0e20
+        k1 = 1
+        x , y = np.meshgrid(rvals,rvals)/Rout
+        x[x < y] = 0 # only upper component of the matrix
+        while(True):
+            integrand1 = sigma[:,None] * x**(2.0*k1+1)
+            integrand2 = sigma[:,None] / x**(2.0*k1)
+            alpha_k1 = np.pi * (factorial(2*k1)/2.0**(2*k1)/factorial(k1)**2)**2
+                
+            integral1 = trapz(integrand1,x=xx)
+            integral2 = trapz(integrand2,radius/R_disk,1.0)
+                
+                delta_vcirc+=2.0 * alpha_k1 * G * R_disk *((2*k1+1.0)/(radius/R_disk)**(2*k1+1)* integral1 - 2.0*k1 *(radius/R_disk)**(2*k1) *integral2)
+              
+                if (k1 > 30):  break
+                abstol,reltol = 1.0e-6,1.0e-5
+                abserr,relerr = np.abs(delta_vcirc_old-delta_vcirc),np.abs(delta_vcirc_old-delta_vcirc)/np.abs(delta_vcirc_old+vcircsquared_0)
+                if (np.abs(delta_vcirc) > abstol/reltol):
+                    if (abserr < abstol): break
+                else:
+                    if (relerr < reltol): break
+                    
+                delta_vcirc_old = delta_vcirc
+                k1 = k1 + 1
+     
+            selfgravity_vcirc_in_plane = np.append(selfgravity_vcirc_in_plane,vcircsquared_0+delta_vcirc)
+        '''
+        return rvals, None
+       
     def evaluate_rotation_curve(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
         Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
-        
+        if (self.self_gravity):
+            _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale)
+            Omega_sq += Omega_sq_sg 
+            
         return rvals, np.sqrt(Omega_sq + self.evaluate_pressure_gradient(Rin,Rout,Nvals,scale=scale)[1] / \
             self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]/ rvals)
 
     def evaluate_radial_velocity(self,Rin,Rout,Nvals=1000,scale='log'):
-        return self.evaluate_radial_velocity_viscous(Rin,Rout,Nvals,scale=scale)
+        if (self.constant_accretion):
+            rvals,sigma = self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)
+            return rvals, -self.constant_accretion / 2 / np.pi / rvals / sigma
+        else:
+            return self.evaluate_radial_velocity_viscous(Rin,Rout,Nvals,scale=scale)
 
     def evaluate_radial_velocity_viscous(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
@@ -152,14 +254,12 @@ class disk2d(object):
         _, dfunc2dR = self.evaluate_radial_gradient(func2,Rin,Rout,Nvals,scale=scale)
 
         velr = dfunc1dR / rvals / sigma / dfunc2dR
-        velr[sigma <= self.sigma_cut] = 0
-        
+        if (self.sigma_floor is not None):
+            velr[sigma <= self.sigma_floor] = 0
+
 
         return rvals,velr
 
-    def evaluate_radial_velocity_constant_mdot(self,Rin,Rout,Nvals=1000,scale='log'):
-        
-        return 0
         
     def evaluate_radial_gradient(self,quantity,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
@@ -180,8 +280,30 @@ class disk2d(object):
             sys.exit()
         return rvals
 
+    def evaluate_enclosed_mass(self,Rin,Rout,Nvals=1000,scale='log'):
+        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
+        def mass_integrand(R):
+            sigma = self.sigma_vals(R)
+            if (self.sigma_floor is not None):
+                if (sigma < self.sigma_floor) : sigma = self.sigma_floor
+            return sigma * R * 2 * np.pi
+        mass = [quad(mass_integrand,0.0,R)[0] for R in rvals]
+        return rvals, mass
+
+    
+    def compute_disk_mass(self,Rin,Rout):
+        __, mass =  self.evaluate_enclosed_mass(Rin,Rout,Nvals=2)
+        return mass[1]
+
+
+    def add_perturbation(self,function):
+        if callable(function):
+            self.density_perturbation_function = function
+        else:
+            print "ERROR: Perturbation function provided not callable"
             
-class disk_mesh2d(disk):
+            
+class disk_mesh2d(object):
     def __init__(self, *args, **kwargs):
 
         self.mesh_type=kwargs.get("mesh_type")
@@ -196,6 +318,7 @@ class disk_mesh2d(disk):
         self.fill_box = kwargs.get("fill_box")
         self.fill_center = kwargs.get("fill_center")
         self.fill_box_Nmax = kwargs.get("fill_box_Nmax")
+
         
         # set default values
         if (self.mesh_type is None):
@@ -223,8 +346,9 @@ class disk_mesh2d(disk):
         if (self.fill_box_Nmax is None):
             self.fill_box_Nmax = 64
 
+        self.Ncells = self.NR * self.Nphi
+            
     def create(self,*args,**kwargs):
-
         
         if (self.mesh_type == "polar"):
 
@@ -287,10 +411,10 @@ class disk_mesh2d(disk):
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
 
-                
+            print R,phi
             return R,phi
 
-
+'''
 class snapshot():
 
     def __init__(self,*args,**kwargs):
@@ -324,54 +448,6 @@ class snapshot():
     
     
      
-    def assign_primitive_variables(self,disk,disk_mesh):
-        
-        R,phi = disk_mesh.create()
-        
-        R1,R2 = 0.99*R.min(),1.01*R.max()
-        radii, density = disk.evaluate_sigma(R1,R2)
-        _, angular_frequency = disk.evaluate_rotation_curve(R1,R2)
-        _, radial_velocity = disk.evaluate_radial_velocity(R1,R2)
-        _, pressure = disk.evaluate_pressure(R1,R2)
-        
-        dens_profile = interp1d(radii,density,kind='linear')
-        vphi_profile = interp1d(radii,angular_frequency*radii,kind='linear')
-        vr_profile = interp1d(radii,radial_velocity,kind='linear')
-        press_profile = interp1d(radii,pressure,kind='linear')
-
-        #primitive variables
-        dens = dens_profile(R)
-        vphi = vphi_profile(R)
-        vr = vr_profile(R)
-        press = press_profile(R)
-
-        #cell ids
-        ids = np.arange(1,R.shape[0]+1,1)
-        #check for boundaries, first inside the boundary
-        ind_inner = (R > disk_mesh.Rin) & (R < (disk_mesh.Rin + disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
-        ind_outer = (R < disk_mesh.Rout) & (R > (disk_mesh.Rout - disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
-        ids[ind_inner+ind_outer] = -1
-        #now outside the boundary
-        ind_inner = (R < disk_mesh.Rin) & (R > (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
-        ind_outer = (R > disk_mesh.Rout) & (R < (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
-        ids[ind_inner+ind_outer] = -2
-        #or buffer cells (only if there are boundaries at the interface)
-        ind_inner = (R < (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
-        ind_outer = (R > (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
-        if (disk_mesh.N_inner_boundary_rings > 0):  ids[ind_inner] = range(-3,-3-len(ids[ind_inner]),-1)
-        if (disk_mesh.N_outer_boundary_rings > 0):  ids[ind_outer] = range(-3,-3-len(ids[ind_outer]),-1)
-
-        dens[ind_inner+ind_outer] = disk.sigma_cut
-        vr[dens <= disk.sigma_cut] = 0
-        vphi[dens <= disk.sigma_cut] = 0
-        press[dens <= disk.sigma_cut] = press[dens <= disk.sigma_cut].min()
-
-
-        vphi[ids < -2] = 0
-        vr[ids < -2] = 0
-        
-        return R,phi,dens,vphi,vr,press,ids
-
 
     def extract(self,index):
         self.pos=self.pos[index,:]
@@ -415,6 +491,8 @@ class snapshot():
               % (disk_mesh.NR,disk_mesh.Nphi,self.pos.shape[0]))
         print("SUMMARY:")
         print("\t Rin=%f Rout=%f" %( disk_mesh.Rin, disk_mesh.Rout))
+'''
+
 
 if __name__=="__main__":
 

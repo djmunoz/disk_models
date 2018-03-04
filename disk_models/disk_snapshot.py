@@ -1,15 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from disk_hdf5 import snapHDF5 as ws
-from scipy.interpolate import interp1d
+
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz
 from scipy.spatial import Voronoi
 import scipy.integrate as integ
 
-from disk_structure import *
+#from disk_structure3d import *
 from disk_parameter_files import *
 from disk_particles import *
+from disk_snapshot_3d import *
+from disk_snapshot_2d import *
 
 STAR_PARTTYPE = 4
 
@@ -35,16 +37,27 @@ class snapshot():
         self.params = paramfile(init_cond_file="./disk.dat")
 
         self.BoxSize = kwargs.get("BoxSize")
+
         
-    def create(self,disk,disk_mesh):
+    def create(self,disk,disk_mesh,empty=False):
 
         self.BoxSize = disk_mesh.BoxSize
         
         # Obtain the primitive quantities for all cells
-        R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
-        
+        if (empty == False):
+            R,phi,z,dens,vphi,vr,press,ids = self.assign_primitive_variables(disk,disk_mesh)
+        else:
+            R, phi, z = disk_mesh.create(disk)
+            dens,vphi,vr,press = None, None, None, None
+            ids = np.arange(1, R.shape[0] + 1,1)
+
+            
         # Load them into the snapshot
-        self.load(R,phi,z,dens,None,vphi,vr,press,ids,self.BoxSize,adiabatic_gamma=disk.adiabatic_gamma)
+        if (disk.__class__.__name__ == 'disk3d'):
+            dims = 3
+        if (disk.__class__.__name__ == 'disk2d'):
+            dims = 2
+        self.load(R,phi,z,dens,None,vphi,vr,press,ids,dims=dims,adiabatic_gamma=disk.adiabatic_gamma)
 
         # Check if there is a central particle
         if (disk.central_particle):
@@ -60,7 +73,13 @@ class snapshot():
             #                                 vel=np.array([0.0,0.0,0.0]).reshape(1,3),
             #                                 mass = disk.Mcentral,ids=[np.array([self.gas.ids.max()+1]).T])
             self.load_particles(central_particle)
-        
+
+
+        if (empty == False):
+            self.obtain_parameters(self, disk, disk_mesh)
+
+    def obtain_parameters(self, disk, disk_mesh):
+    
         # Obtain target masses and allowed volumes
         self.params.reference_gas_part_mass = disk.compute_disk_mass(disk_mesh.Rin,disk_mesh.Rout)/disk_mesh.Ncells
 
@@ -76,10 +95,11 @@ class snapshot():
         self.params.min_volume = self.params.reference_gas_part_mass/dens[ind].max()
 
         # Obtain the temperature balance far from the disk
-        press_background = press[dens == dens[R > 1.2 * disk_mesh.Rout].min()].mean()
-        dens_background = dens[dens == dens[R > 1.2 * disk_mesh.Rout].min()].mean()
-        self.params.limit_u_below_this_density = dens_background
-        self.params.limit_u_below_this_density_to_this_value = press_background / (disk.adiabatic_gamma - 1.0) / dens_background 
+        if (disk.__class__.__name__ == 'disk3d'):
+            press_background = press[dens == dens[R > 1.2 * disk_mesh.Rout].min()].mean()
+            dens_background = dens[dens == dens[R > 1.2 * disk_mesh.Rout].min()].mean()
+            self.params.limit_u_below_this_density = dens_background
+            self.params.limit_u_below_this_density_to_this_value = press_background / (disk.adiabatic_gamma - 1.0) / dens_background 
         
         # Assign the box size
         self.params.box_size = self.BoxSize
@@ -110,22 +130,44 @@ class snapshot():
         if (disk.l < 1.e-2):
             self.params.iso_sound_speed = disk.csnd0
                 
-    def load(self,R,phi,z,dens,mass,vphi,vr,press,ids,BoxSize,particle_type=0,adiabatic_gamma=1.4):
-        
-        x = R * np.cos(phi) + 0.5 * BoxSize
-        y = R * np.sin(phi) + 0.5 * BoxSize
-        z = z + 0.5 * BoxSize
-        
-        vx = vr * np.cos(phi) - vphi * np.sin(phi)
-        vy = vr * np.sin(phi) + vphi * np.cos(phi)
-        vz = np.zeros(vx.shape[0])
+    def load(self,R,phi,z,dens,mass,vphi,vr,press,ids,dims=3,particle_type=0,adiabatic_gamma=1.4):
 
+        if (dims == 3):
+            X0  = 0.5 * self.BoxSize
+            Y0  = 0.5 * self.BoxSize
+            Z0  = 0.5 * self.BoxSize
+        elif (dims == 2):
+            X0  = 0.5 * self.BoxSize
+            Y0  = 0.5 * self.BoxSize
+            Z0  = 0
+
+        x = R * np.cos(phi) + X0
+        y = R * np.sin(phi) + Y0
+        z = z + Z0
+
+        try:
+            vx = vr * np.cos(phi) - vphi * np.sin(phi)
+        except TypeError:
+            vx = None
+        try:
+            vy = vr * np.sin(phi) + vphi * np.cos(phi)
+        except TypeError:
+            vy = None
+        try:
+            vz = np.zeros(z.shape[0])
+        except TypeError:
+            vz =  None
+
+            
         if (particle_type == 0):
             self.gas.dens = dens
             self.gas.press = press
             self.gas.pos = np.array([x,y,z]).T
             self.gas.vel = np.array([vx,vy,vz]).T
-            self.gas.utherm = press/self.gas.dens/(adiabatic_gamma - 1)
+            try:
+                self.gas.utherm = press/self.gas.dens/(adiabatic_gamma - 1)
+            except TypeError:
+                self.gas.utherm = None
             self.gas.ids = ids
             
         elif (particle_type == STAR_PARTTYPE):
@@ -137,7 +179,14 @@ class snapshot():
     
      
     def assign_primitive_variables(self,disk,disk_mesh):
+
+        if (disk.__class__.__name__ == 'disk3d'):
+            return assign_primitive_variables_3d(disk,disk_mesh)
+
+        if (disk.__class__.__name__ == 'disk2d'):
+            return assign_primitive_variables_2d(disk,disk_mesh)
         
+        '''
         R,phi,z = disk_mesh.create(disk)
         
         x = R*np.cos(phi)
@@ -218,7 +267,7 @@ class snapshot():
         
         vr = np.zeros(R.shape)
         ids = np.arange(1,R.shape[0]+1,1)
-
+        '''
         
         return R,phi,z,dens,vphi,vr,press,ids
 
@@ -326,4 +375,172 @@ class snapshot():
 
 
 
+
+def assign_primitive_variables_2d(disk,disk_mesh):
+
+        R,phi = disk_mesh.create()
+        
+        R1,R2 = 0.99*R.min(),1.01*R.max()
+        radii, density = disk.evaluate_sigma(R1,R2)
+
+        _, angular_frequency = disk.evaluate_rotation_curve(R1,R2)
+        _, radial_velocity = disk.evaluate_radial_velocity(R1,R2)
+        _, pressure = disk.evaluate_pressure(R1,R2)
+        
+        dens_profile = interp1d(radii,density,kind='linear')
+        vphi_profile = interp1d(radii,angular_frequency*radii,kind='linear')
+        vr_profile = interp1d(radii,radial_velocity,kind='linear')
+        press_profile = interp1d(radii,pressure,kind='linear')
+
+        #primitive variables
+        dens = dens_profile(R)
+        vphi = vphi_profile(R)
+        vr = vr_profile(R)
+        press = press_profile(R)
+
+        # Check if there are non-axisymmetric perturbations
+        if (disk.density_perturbation_function is not None):
+            index = phi <= np.pi
+            dens[index]+= np.vectorize(disk.density_perturbation_function)(R[index],phi[index])
+            dens[np.invert(index)]+= np.vectorize(disk.density_perturbation_function)(R[np.invert(index)],
+                                                                                     2 * np.pi-phi[np.invert(index)])
+            
+        
+        #cell ids
+        ids = np.arange(1,R.shape[0]+1,1)
+        #check for boundaries, first inside the boundary
+        if (disk_mesh.N_inner_boundary_rings > 0):
+            ind_inner = (R > disk_mesh.Rin) & (R < (disk_mesh.Rin + disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
+        else:
+            ind_inner = np.repeat(0,R.shape[0]).astype(bool)
+        if (disk_mesh.N_outer_boundary_rings > 0):                
+            ind_outer = (R < disk_mesh.Rout) & (R > (disk_mesh.Rout - disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
+        else:
+            ind_outer = np.repeat(0,R.shape[0]).astype(bool)
+        ids[ind_inner+ind_outer] = -1
+        #now outside the boundary
+        if (disk_mesh.N_inner_boundary_rings > 0):
+            ind_inner = (R < disk_mesh.Rin) & (R > (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
+        else:
+            ind_inner = np.repeat(0,R.shape[0]).astype(bool)
+        if (disk_mesh.N_outer_boundary_rings > 0):    
+            ind_outer = (R > disk_mesh.Rout) & (R < (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
+        else:
+            ind_outer = np.repeat(0,R.shape[0]).astype(bool)
+        ids[ind_inner+ind_outer] = -2
+
+        if (disk.sigma_back is not None):
+            print disk.sigma_back
+            dens[ind_inner+ind_outer] = disk.sigma_back
+            vr[dens <= disk.sigma_back] = 0
+            vphi[dens <= disk.sigma_back] = 0
+            press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
+        
+        #or buffer cells (only if there are boundaries at the interface)
+        ind_inner = (R < (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
+        ind_outer = (R > (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
+        if (disk_mesh.N_inner_boundary_rings > 0):  ids[ind_inner] = range(-3,-3-len(ids[ind_inner]),-1)
+        if (disk_mesh.N_outer_boundary_rings > 0):  ids[ind_outer] = range(-3,-3-len(ids[ind_outer]),-1)
+
+        
+        if (disk.sigma_back is not None):
+            dens[ind_inner+ind_outer] = disk.sigma_back
+            vr[dens <= disk.sigma_back] = 0
+            vphi[dens <= disk.sigma_back] = 0
+            press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
+
+
+        vphi[ids < -2] = 0
+        vr[ids < -2] = 0
+
+        z = np.zeros(dens.shape[0])
+        
+        return R,phi,z,dens,vphi,vr,press,ids
+
+
+    
+
+def assign_primitive_variables_3d(disk,disk_mesh):
+
+        R, phi, z = disk_mesh.create(disk)
+        
+        x = R*np.cos(phi)
+        y = R*np.sin(phi)
+        points = np.array([x,y,z]).T
+        #print "Voronoi"
+        #vor = Voronoi(points)
+        
+        R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
+        #obtain density of cells
+        dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
+        dens_cut = midplane_dens[-1]
+        radii = np.append(radii,R2)
+        midplane_dens = np.append(midplane_dens,dens_cut)
+        dens[dens < dens_cut] = dens_cut
+        midplane_dens[midplane_dens < dens_cut] = dens_cut
+        #window_length = 20
+        #weights = np.exp(np.linspace(-1., 0., window_length))
+        #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
+        dens0_profile =  interp1d(radii,midplane_dens,kind='linear')#,fill_value='extrapolate')
+
+        
+        #evaluate other quantities
+        Nvals = 1200 # this number being large can be critical when steep pressure gradients are present
+        scale = 'log'
+        R1,R2 = 0.99*R.min(),disk_mesh.Rout
+        while (True):
+            radii, angular_frequency_sq = disk.evaluate_angular_freq_gravity(R1,R2,Nvals=Nvals,scale=scale)
+            _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=Nvals,scale=scale)
+            pressure_midplane = dens0_profile(radii) * sound_speed**2
+            _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=Nvals,scale=scale)
+            _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2,Nvals=Nvals,scale=scale)
+            if np.all((angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii) > 0):
+                break
+            else:
+                R1,R2 = 1.0001 * R1, 0.999 * R2
+                Nvals = int(0.999 * (Nvals-1))
+            if (Nvals < 500):
+                print "Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again"
+                exit()
+                    
+            
+        angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
+            
+        #update mesh radial limits
+        disk_mesh.Rin, disk_mesh.Rout = radii.min(),radii.max()
+        
+        #interpolate mid-plane quantities
+        vphi_profile = interp1d(radii,angular_frequency_midplane*radii,kind='linear')
+        soundspeedsq_profile = interp1d(radii,sound_speed**2,kind='linear')
+        soundspeedsq_gradient_profile = interp1d(radii,soundspeed_sq_gradient,kind='linear')
+
+        # primitive variables inside the disk
+        ind_in = (R > disk_mesh.Rin) & (R < disk_mesh.Rout) & (np.abs(z) < disk_mesh.zmax) 
+        vphi, press = np.zeros(R.shape),np.zeros(R.shape)
+        vphi[ind_in] = vphi_profile(R[ind_in]) -  soundspeedsq_gradient_profile(R[ind_in]) * np.log(dens[ind_in]/dens0_profile(R[ind_in]))
+        press[ind_in] = dens[ind_in] * soundspeedsq_profile(R[ind_in])
+
+        # behavior outside the disk
+        ind_out = (R >= disk_mesh.Rout) | (np.abs(z) >= disk_mesh.zmax) | (R <= disk_mesh.Rin) 
+        vphi[ind_out] = 0
+        dens[ind_out] = dens_cut/1000000
+        def soundspeed(R): return disk.csnd0 * (R/disk.csndR0)**(-disk.l*0.5)
+        press_cut = dens_cut * soundspeed(disk_mesh.Rout)**2
+        press[ind_out] = press_cut
+
+        ind = R < disk_mesh.Rin 
+        vphi[ind] = vphi[ind]*np.exp(-(disk_mesh.Rin-R[ind])**2/R[ind]**2)
+        dens[ind] = dens_cut/1000000
+
+        # outside the disk proper, we want a hot, dilute medium that is also ~stationary
+        ind = dens < dens_cut/100
+        press[ind] = press_cut
+        vphi[ind] = 0.0
+
+        
+        vr = np.zeros(R.shape)
+        ids = np.arange(1,R.shape[0]+1,1)
+
+        
+        return R,phi,z,dens,vphi,vr,press,ids
 

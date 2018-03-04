@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numpy.random as rd
 from scipy.interpolate import interp1d
-from scipy.integrate import quad
+from scipy.integrate import quad, trapz
 from scipy.integrate import cumtrapz
 from scipy.spatial import Voronoi
 import scipy.integrate as integ
@@ -45,6 +45,11 @@ def SplineDerivative(R,h):
                   (u[ind] * u[ind] * u[ind]))
       
   return fac
+
+
+def soundspeed(R,csnd0,l,R0):
+    return csnd0 * (R/R0)**(-l*0.5)
+
 
 class disk3d(object):
     def __init__(self, *args, **kwargs):
@@ -184,10 +189,47 @@ class disk3d(object):
         if (self.potential_type == "keplerian"):
             return self.evaluate_angular_freq_central_gravity(Rin,Rout,Nvals,scale)
         
-    
+    def evaluate_angular_freq_self_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
+      rvals, mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
+
+      # First guess at the squared angular velocity
+      vcircsquared_0 = mvals/rvals
+      delta_vcirc,delta_vcirc_old  = 0.0, 1.0e20
+      k1 = 1
+      if (count >0):
+        while(True):
+          def integrand1(x): return GasSigma(x * R_disk) * x**(2.0*k1+1)
+          def integrand2(x): return GasSigma(x * R_disk) / x**(2.0*k1)
+          alpha_k1 = np.pi*(factorial(2*k1)/2.0**(2*k1)/factorial(k1)**2)**2
+          
+          integral1 = quad(integrand1,0.0,radius/R_disk,points=np.linspace(0.0,radius/R_disk,10))[0]
+          integral2 = quad(integrand2,radius/R_disk,np.inf,limit=100)[0]
+          
+          delta_vcirc+=2.0 * alpha_k1 * G * R_disk *((2*k1+1.0)/(radius/R_disk)**(2*k1+1)* integral1 - 2.0*k1 *(radius/R_disk)**(2*k1) *integral2)
+          
+          if (k1 > 30):break
+          abstol,reltol = 1.0e-6,1.0e-5
+          abserr,relerr = np.abs(delta_vcirc_old-delta_vcirc),np.abs(delta_vcirc_old-delta_vcirc)/np.abs(delta_vcirc_old+vcircsquared_0)
+          if (np.abs(delta_vcirc) > abstol/reltol):
+            if (abserr < abstol): break
+          else:
+            if (relerr < reltol): break
+
+          delta_vcirc_old = delta_vcirc
+          k1 = k1 + 1
+     
+        selfgravity_vcirc_in_plane = np.append(selfgravity_vcirc_in_plane,vcircsquared_0+delta_vcirc)
+
+
+
+          
     def evaluate_angular_freq_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
-        return self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale)
-        
+         rvals, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale)
+         if (self.self_gravity):
+           _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale)
+           rvals, Omega_sq + Omega_sq_sg
+           
+         return rvals, Omega_sq 
     
     def evaluate_rotation_curve_2d(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals, Omega_sq  = self.evaluate_angular_freq_gravity(Rin,Rout,Nvals,scale)
@@ -248,60 +290,62 @@ class disk3d(object):
         return rvals
 
     def evaluate_radial_mass_bins(self,Rin,Rout,Nbins):
-        rvals,mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
-        MasstoRadius=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
-        radial_bins= MasstoRadius(np.linspace(0.0,1.0,Nbins)*max(mvals))
-        return radial_bins
-
+      rvals,mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
+      MasstoRadius=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
+      radial_bins= MasstoRadius(np.linspace(0.0,1.0,Nbins)*max(mvals))
+      return radial_bins
+    
     def evaluate_vertical_structure_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
-        zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
-
-        m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
         
-        # First take a guess of the vertical structure        
-        if (m_enclosed < 0.1 * self.Mcentral):
-            zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-            VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+      m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
+      
+      # First take a guess of the vertical structure        
+      if (m_enclosed < 0.1 * self.Mcentral):
+        zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+        VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+      else:
+        VertProfileNorm = self.sigma_disk.evaluate(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
+        
+      VertProfileNorm_old = 1.0e-40
+      if (VertProfileNorm < VertProfileNorm_old): VertProfileNorm = VertProfileNorm_old
+
+
+      def VerticalPotentialEq(Phi,z,r,rho0):
+        dPhiGrad_dz =  rho0 * G* 4 * np.pi * np.exp(-(self.vertical_potential(r,z) + Phi[1]) / soundspeed(r,self.csnd0,self.l,self.csndR0)**2)
+        dPhi_dz = Phi[0]
+        return [dPhiGrad_dz,dPhi_dz]
+
+      iterate = 0
+      while(True) : #iteration
+        min_step = (zvals[1]-zvals[0])/100.0
+        tol = 1.0e-9
+        # Solve for the vertical potential
+        soln=integ.odeint(VerticalPotentialEq,[0.0,0.0],zvals,args=(R,VertProfileNorm),rtol=tol,
+                          mxords=15,hmin=min_step,printmessg=False)[:,1]
+        zrho0=[np.exp(-(self.vertical_potential(R,zvals[kk])+soln[kk])/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for kk in range(len(zvals))]
+        VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+        zrho = [VertProfileNorm * r for r in zrho0]
+
+        if (VertProfileNorm * 1.333 * np.pi * R**3 < 1.0e-12 * self.Mcentral): break
+        # Check if vertical structure solution has converged
+        abstol,reltol = 1.0e-9,1.0e-6
+        abserr,relerr = np.abs(VertProfileNorm_old-VertProfileNorm),np.abs(VertProfileNorm_old-VertProfileNorm)/np.abs(VertProfileNorm_old)
+        
+        if (np.abs(VertProfileNorm) > abstol/reltol):
+          if (abserr < abstol): break
         else:
-            VertProfileNorm = self.sigma_disk.evaluate(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
+          if (relerr < reltol): break
+        VertProfileNorm_old = VertProfileNorm
+        iterate += 1
 
-        VertProfileNorm_old = 1.0e-40
-        if (VertProfileNorm < VertProfileNorm_old): VertProfileNorm = VertProfileNorm_old
-
-
-        
-        def VerticalPotentialEq(Phi,z,r,rho0):
-            dPhiGrad_dz =  rho0 * G* 4 * np.pi * np.exp(-(self.vertical_potential(r,z) + Phi[1]) / soundspeed(r,self.csnd0,self.l,self.csndR0)**2)
-            dPhi_dz = Phi[0]
-            return [dPhiGrad_dz,dPhi_dz]
-
-        iterate = 0
-        while(True) : #iteration
-            min_step = (zvals[1]-zvals[0])/100.0
-            tol = 1.0e-9
-            # Solve for the vertical potential
-            soln=integ.odeint(VerticalPotentialEq,[0.0,0.0],zvals,args=(R,VertProfileNorm),rtol=tol,
-                              mxords=15,hmin=min_step,printmessg=False)[:,1]
-            zrho0=[np.exp(-(self.vertical_potential(R,zvals[kk])+soln[kk])/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for kk in range(len(zvals))]
-            VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
-            zrho = [VertProfileNorm * r for r in zrho0]
-
-            if (VertProfileNorm * 1.333 * np.pi * R**3 < 1.0e-12 * self.Mcentral): break
-            # Check if vertical structure solution has converged
-            abstol,reltol = 1.0e-9,1.0e-6
-            abserr,relerr = np.abs(VertProfileNorm_old-VertProfileNorm),np.abs(VertProfileNorm_old-VertProfileNorm)/np.abs(VertProfileNorm_old)
-            
-            if (np.abs(VertProfileNorm) > abstol/reltol):
-                if (abserr < abstol): break
-            else:
-                if (relerr < reltol): break
-            VertProfileNorm_old = VertProfileNorm
-            iterate += 1
-
-        return zvals,zrho,VertProfileNorm
+      return zvals,zrho,VertProfileNorm
 
     def evaluate_vertical_structure_no_selfgravity(self,R,zin,zout,Nzvals=400):
+      if (zin > 0):
         zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
+      else:
+        zvals = np.append(0,np.logspace(-6,np.log10(zout),Nzvals))
+        
         #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
         #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
         zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
@@ -328,6 +372,8 @@ class disk3d(object):
     def vertical_potential(self,R,z):
         return (self.spherical_potential(np.sqrt(R*R + z*z)) - self.spherical_potential(R))
 
+  
+      
     def solve_vertical_structure(self,Rsamples,zsamples,Rin,Rout,Ncells):
 
         dens = np.zeros(Rsamples.shape[0])
@@ -345,11 +391,13 @@ class disk3d(object):
         bin_inds=np.digitize(Rsamples,radial_bins)
         mid_plane = []
         radii = []
+        
         zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
 
         print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
         for kk in range(0,radial_bins.shape[0]):
             update_progress(kk,radial_bins.shape[0])
+            print kk,radial_bins.shape[0]
             N_in_bin = Rsamples[bin_inds == kk].shape[0]
             if (N_in_bin == 0):
                 mid_plane.append(0.0)
@@ -376,6 +424,8 @@ class disk_mesh3d():
         self.zmax = 0.0
         self.NR = kwargs.get("NR")
         self.Nphi = kwargs.get("Nphi")
+        self.Nlat = kwargs.get("Nlat")
+        self.latmax = kwargs.get("latmax")
         self.Ncells = kwargs.get("Ncells")
         self.BoxSize = kwargs.get("BoxSize")
         self.mesh_alignment = kwargs.get("mesh_alignment")
@@ -388,17 +438,23 @@ class disk_mesh3d():
         
         # set default values
         if (self.mesh_type is None):
-            self.mesh_type="polar"
+          self.mesh_type="spherical"
         if (self.Rin is None):
-            self.Rin = 1
+          self.Rin = 1
         if (self.Rout is None):
-            self.Rout = 10
+          self.Rout = 10
         if (self.NR is None):
-            self.NR = 800
+          self.NR = 800
         if (self.Nphi is None):
-            self.Nphi = 600
+          self.Nphi = 600
+        if (self.Nlat is None):
+          self.Nlat= 200
         if (self.Ncells is None):
-            self.Ncells =  self.NR * self.Nphi
+          self.Ncells =  self.NR * self.Nphi * self.Nlat
+        if (self.mesh_alignment is None):
+          self.mesh_alignment = "aligned"
+
+            
         if (self.N_inner_boundary_rings is None):
             self.N_inner_boundary_rings = 1
         if (self.N_outer_boundary_rings is None):
@@ -416,12 +472,52 @@ class disk_mesh3d():
         if (self.max_fill_mesh_points is None):
             self.max_fill_mesh_points = 0.15 * self.Ncells
 
+
             
     def create(self,disk):
+        
+      '''
+      Create the distribution of mesh-generating points in 3D
+      
+      '''
+      
+      if (self.mesh_type == "spherical"):
+        # radial cooordinate
+        rvals = np.logspace(np.log10(self.Rin),np.log10(self.Rout),self.NR+1)
+        rvals = rvals[:-1] + 0.5 * np.diff(rvals)
+        self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
+        for kk in range(self.N_inner_boundary_rings): rvals=np.append(rvals[0]-self.deltaRin, rvals)
+        for kk in range(self.N_outer_boundary_rings): rvals=np.append(rvals,rvals[-1]+self.deltaRout)
+
+        # azimuthal coordinate
+        phivals = np.linspace(0,2*np.pi,self.Nphi+1)
+        # polar/meridional coordinate
+        latvals = np.append(np.linspace(-self.latmax,0,self.Nlat/2+1),np.linspace(self.latmax*2.0/self.Nlat,self.latmax,self.Nlat/2))
 
         
-        if (self.mesh_type == "polar"):
+        R,phi,lat = np.meshgrid(rvals,phivals,latvals)
 
+        
+        if (self.mesh_alignment == "interleaved"):
+          phi[:-1,2*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2,::2] = phi[:-1,2*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2,::2] + 0.5*np.diff(phi[:,2*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2,::2],axis=0)
+
+          lat[:,2*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2,:-1] = lat[:,2*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2,:-1] + 0.5*np.diff(lat[:,2*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2,:],axis=2)
+ 
+          phi = phi[:-1,:,:]
+          R = R[:-1,:,:]
+          lat = lat[:-1,:,:]
+
+        # Flatten arrays
+        R, phi,lat = R.flatten(),phi.flatten(),lat.flatten()
+        # compute z-coordinate
+        z = R * np.sin(lat)
+
+
+        return R,phi,z
+
+      
+      if (self.mesh_type == "cylindrical"):
+          
             rvals = np.logspace(np.log10(self.Rin),np.log10(self.Rout),self.NR+1)
             rvals = rvals[:-1] + 0.5 * np.diff(rvals)
             self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
@@ -484,19 +580,19 @@ class disk_mesh3d():
                 
             return R,phi,z
 
-        if (self.mesh_type == "mc"):
-            R,phi = self.mc_sample_2d(disk)
-            z = self.mc_sample_vertical(R,disk)
+      if (self.mesh_type == "mc"):
+          R,phi = self.mc_sample_2d(disk)
+          z = self.mc_sample_vertical(R,disk)
+          
+          if (self.fill_background | self.fill_center | self.fill_box):
+            Radditional, phiadditional, zadditional = np.empty([0]),np.empty([0]),np.empty([0])
 
-            if (self.fill_background | self.fill_center | self.fill_box):
-                Radditional, phiadditional, zadditional = np.empty([0]),np.empty([0]),np.empty([0])
-
-            self.zmax = np.abs(z).max()
-            zmax  = np.abs(z).max()
-            Rmin  = R.min()
-            Rmax  = R.max()
+          self.zmax = np.abs(z).max()
+          zmax  = np.abs(z).max()
+          Rmin  = R.min()
+          Rmax  = R.max()
             
-            if (self.fill_background == True):
+          if (self.fill_background == True):
                 Rback,phiback = self.mc_sample_2d(disk,Npoints=0.1 * self.Ncells)
                 zback = self.mc_sample_vertical_background(R,Rback,z,disk)
                 Rbackmax = Rback.max()
@@ -523,7 +619,7 @@ class disk_mesh3d():
                 Rmin = min(Rmin,np.abs(Radditional).min())
 
             
-            if (self.fill_center == True):
+          if (self.fill_center == True):
                 rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=100)
                 cellmass = mvals[-1]/self.Ncells
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
@@ -549,7 +645,7 @@ class disk_mesh3d():
                 Rmin = min(Rmin,np.abs(Radditional).min())
 
             
-            if (self.fill_box == True):
+          if (self.fill_box == True):
                 print "Filling computational box of side half-length",self.BoxSize/2
                 zmax0 = zmax
                 Rmax0 = Rmax
@@ -584,7 +680,7 @@ class disk_mesh3d():
 
                     delta  = min(max(Lx,Lz)*1.0/16*Nlayers,0.6*min(Lx-Lx_in,Lz-Lz_in))
 
-            if (self.fill_background | self.fill_center | self.fill_box):
+          if (self.fill_background | self.fill_center | self.fill_box):
 
                 # Check if we added TOO MANY additional mesh points
                 if (Radditional.shape[0] > self.max_fill_mesh_points):
@@ -599,8 +695,8 @@ class disk_mesh3d():
                 phi = np.append(phi,phiadditional)
                 z = np.append(z,zadditional)
 
-            print "Added a total of %i extra points\n" % Radditional.shape[0]
-            return R,phi,z
+          print "Added a total of %i extra points\n" % Radditional.shape[0]
+          return R,phi,z
 
                              
     def mc_sample_2d(self,disk,**kwargs):
