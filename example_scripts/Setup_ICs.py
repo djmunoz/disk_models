@@ -59,3 +59,4 @@ if __name__=="__main__":
     print s.particle.pos[0,:],s.particle.vel[0,:]
     print s.particle.pos[1,:],s.particle.vel[1,:]
     print s.particle.pos[2,:],s.particle.vel[2,:]
+
