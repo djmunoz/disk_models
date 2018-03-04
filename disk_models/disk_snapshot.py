@@ -7,11 +7,9 @@ from scipy.integrate import cumtrapz
 from scipy.spatial import Voronoi
 import scipy.integrate as integ
 
-#from disk_structure3d import *
 from disk_parameter_files import *
 from disk_particles import *
-from disk_snapshot_3d import *
-from disk_snapshot_2d import *
+
 
 STAR_PARTTYPE = 4
 
