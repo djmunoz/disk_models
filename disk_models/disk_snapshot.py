@@ -75,7 +75,7 @@ class snapshot():
 
 
         if (empty == False):
-            self.obtain_parameters(self, disk, disk_mesh)
+            self.obtain_parameters(disk, disk_mesh)
 
     def obtain_parameters(self, disk, disk_mesh):
     
