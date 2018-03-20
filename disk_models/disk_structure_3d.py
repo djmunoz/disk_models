@@ -4,8 +4,12 @@ import numpy.random as rd
 from scipy.interpolate import interp1d
 from scipy.integrate import quad, trapz
 from scipy.integrate import cumtrapz
-from scipy.spatial import Voronoi
 import scipy.integrate as integ
+try:
+  from scipy.spatial import Voronoi
+except ImportError:
+  None
+
 
 from disk_density_profiles import *
 from disk_external_potentials import *
