@@ -5,7 +5,11 @@ from disk_hdf5 import snapHDF5 as ws
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
-from scipy.spatial import Voronoi
+try:
+    from scipy.spatial import Voronoi
+except ImportError:
+    None
+    
 import scipy.integrate as integ
 
 from disk_parameter_files import *
