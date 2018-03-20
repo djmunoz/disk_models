@@ -76,6 +76,8 @@ class disk2d(object):
             self.Mcentral_soft = 0.0
         if (self.quadrupole_correction is None):
             self.quadrupole_correction = 0
+        if (self.sigma_type is None):
+            self.sigma_type = "powerlaw"
             
         if (self.sigma_type == "powerlaw"):
             self.sigma_disk = powerlaw_disk(**kwargs)
@@ -236,7 +238,10 @@ class disk2d(object):
     def evaluate_radial_velocity(self,Rin,Rout,Nvals=1000,scale='log'):
         if (self.constant_accretion):
             rvals,sigma = self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)
-            return rvals, -self.constant_accretion / 2 / np.pi / rvals / sigma
+            rvel = -self.constant_accretion / 2.0 / np.pi / rvals / sigma
+            # correct for extremely high values
+            rvel[rvals < 3 * Rin] *= np.exp(-(2*Rin/rvals[rvals < 3 * Rin])**6)
+            return rvals, rvel
         else:
             return self.evaluate_radial_velocity_viscous(Rin,Rout,Nvals,scale=scale)
 
@@ -311,6 +316,8 @@ class disk_mesh2d(object):
         self.Rout = kwargs.get("Rout")
         self.NR = kwargs.get("NR")
         self.Nphi = kwargs.get("Nphi")
+        self.Nphi_inner_bound = kwargs.get("Nphi_inner_bound")
+        self.Nphi_outer_bound = kwargs.get("Nphi_outer_bound")
         self.BoxSize = kwargs.get("BoxSize")
         self.mesh_alignment = kwargs.get("mesh_alignment")
         self.N_inner_boundary_rings = kwargs.get("N_inner_boundary_rings")
@@ -331,6 +338,10 @@ class disk_mesh2d(object):
             self.NR = 800
         if (self.Nphi is None):
             self.Nphi = 600
+        if (self.Nphi_inner_bound is None):
+            self.Nphi_inner_bound = self.Nphi
+        if (self.Nphi_outer_bound is None):
+            self.Nphi_outer_bound = self.Nphi
         if (self.N_inner_boundary_rings is None):
             self.N_inner_boundary_rings = 1
         if (self.N_outer_boundary_rings is None):
@@ -355,8 +366,9 @@ class disk_mesh2d(object):
             rvals = np.logspace(np.log10(self.Rin),np.log10(self.Rout),self.NR+1)
             rvals = rvals[:-1] + 0.5 * np.diff(rvals)
             self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
-            # Add cells outside the boundary
+            # Add cells outside the inner boundary
             for kk in range(self.N_inner_boundary_rings): rvals=np.append(rvals[0]-self.deltaRin, rvals)
+            # Add cells outside the outer boundary
             for kk in range(self.N_outer_boundary_rings): rvals=np.append(rvals,rvals[-1]+self.deltaRout)
 
             phivals = np.linspace(0,2*np.pi,self.Nphi+1)
@@ -364,11 +376,38 @@ class disk_mesh2d(object):
             
             if (self.mesh_alignment == "interleaved"):
                 phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] = phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] + 0.5*np.diff(phi[:,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2],axis=0)
-                
+
             phi = phi[:-1,:]
             R = R[:-1,:]
+            rvals = R.mean(axis=0)
+            
             R, phi = R.flatten(),phi.flatten()
             
+            if (self.Nphi_inner_bound != self.Nphi):
+                rvals_add = rvals[rvals <= rvals[2 * self.N_inner_boundary_rings - 1]]
+                rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_inner_boundary_rings)
+                print rvals_add
+                ind = R[:] > np.round(rvals[1],4)
+                print R.min()
+                R, phi = R[ind], phi[ind]
+                print R.min()
+                print self.Nphi_inner_bound,rvals_add
+                R_add, phi_add = np.meshgrid(rvals_add, np.linspace(0, 2*np.pi, self.Nphi_inner_bound + 1))
+                R = np.append(R,R_add[:-1,:].flatten())
+                phi = np.append(phi,phi_add[:-1,:].flatten())
+                                
+            if (self.Nphi_outer_bound != self.Nphi):
+                rvals_add = rvals[rvals >= rvals[-2 * self.N_outer_boundary_rings]]
+                rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_outer_boundary_rings)
+                ind = R[:] < rvals[-2 * self.N_outer_boundary_rings]
+                R, phi = R[ind], phi[ind]
+                R_add, phi_add = np.meshgrid(rvals_add, np.linspace(0, 2*np.pi, self.Nphi_outer_bound + 1))
+                R = np.append(R,R_add.flatten())
+                phi = np.append(phi,phi_add.flatten())
+
+
+
+                
             if (self.fill_box == True):
                 rvals = np.array([R.max()+self.deltaRout,R.max()+2* self.deltaRout])
                 phivals = np.arange(0,2*np.pi,2*np.pi/(0.5*self.Nphi))

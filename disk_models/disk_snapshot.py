@@ -19,6 +19,7 @@ class gas_data():
         self.pos=kwargs.get("pos")
         self.vel=kwargs.get("vel")
         self.dens=kwargs.get("dens")
+        self.mass=kwargs.get("mass")
         self.press=kwargs.get("press")
         self.utherm=kwargs.get("utherm")
         self.ids=kwargs.get("ids")
@@ -75,9 +76,9 @@ class snapshot():
 
 
         if (empty == False):
-            self.obtain_parameters(disk, disk_mesh)
+            self.obtain_parameters(disk, disk_mesh, R, phi, z,dens)
 
-    def obtain_parameters(self, disk, disk_mesh):
+    def obtain_parameters(self, disk, disk_mesh,R,phi,z,dens):
     
         # Obtain target masses and allowed volumes
         self.params.reference_gas_part_mass = disk.compute_disk_mass(disk_mesh.Rin,disk_mesh.Rout)/disk_mesh.Ncells
@@ -139,6 +140,7 @@ class snapshot():
             X0  = 0.5 * self.BoxSize
             Y0  = 0.5 * self.BoxSize
             Z0  = 0
+            z = np.zeros(len(R))
 
         x = R * np.cos(phi) + X0
         y = R * np.sin(phi) + Y0
@@ -159,7 +161,10 @@ class snapshot():
 
             
         if (particle_type == 0):
-            self.gas.dens = dens
+            if (mass is not None):
+                self.gas.mass = mass
+            if (dens is not None):
+                self.gas.dens = dens
             self.gas.press = press
             self.gas.pos = np.array([x,y,z]).T
             self.gas.vel = np.array([vx,vy,vz]).T
@@ -268,7 +273,7 @@ class snapshot():
         ids = np.arange(1,R.shape[0]+1,1)
         '''
         
-        return R,phi,z,dens,vphi,vr,press,ids
+        #return R,phi,z,dens,vphi,vr,press,ids
 
 
     def incline(self,theta,phi,disk_mesh):
@@ -301,14 +306,18 @@ class snapshot():
         self.gas.pos=self.gas.pos[index,:]
         self.gas.vel=self.gas.vel[index,:]
         self.gas.dens=self.gas.dens[index]
-        self.gas.utherm=self.gas.utherm[index]
+        if (self.gas.utherm is not None):
+            self.gas.utherm=self.gas.utherm[index]
+        if (self.gas.mass is not None):
+            self.gas.mass=self.gas.mass[index] 
         self.gas.ids=self.gas.ids[index]
 
     def append(self,snapshot):
         self.gas.pos=np.concatenate([self.gas.pos,snapshot.gas.pos],axis=0)
         self.gas.vel=np.concatenate([self.gas.vel,snapshot.gas.vel],axis=0)
         self.gas.dens=np.append(self.gas.dens,snapshot.gas.dens)
-        self.gas.utherm=np.append(self.gas.utherm,snapshot.gas.utherm)
+        if (self.gas.utherm is not None):
+            self.gas.utherm=np.append(self.gas.utherm,snapshot.gas.utherm)
         self.gas.ids=np.append(self.gas.ids,snapshot.gas.ids)
         self.gas.ids[self.gas.ids > 0] = np.arange(1,1+self.gas.ids[self.gas.ids > 0].shape[0])
 
@@ -332,7 +341,8 @@ class snapshot():
         self.particle.center_of_mass_frame()
         self.particle.pos  = np.add(self.particle.pos,np.array([0.5 * self.BoxSize,0.5 * self.BoxSize,0.5 * self.BoxSize]))
         
-    def write_snapshot(self,disk,disk_mesh,filename="./disk.dat.hdf5",time=0):
+    def write_snapshot(self,disk,disk_mesh,filename="./disk.dat.hdf5",time=0, \
+                       relax_density_in_input = False):
         
         if not (self.gas.pos is None):
             Ngas = self.gas.pos.shape[0]
@@ -354,8 +364,14 @@ class snapshot():
         ws.writeheader(f, header)
         ws.write_block(f, "POS ", 0, self.gas.pos)
         ws.write_block(f, "VEL ", 0, self.gas.vel)
-        ws.write_block(f, "MASS", 0, self.gas.dens)
-        ws.write_block(f, "U   ", 0, self.gas.utherm)
+        if (relax_density_in_input):
+            ws.write_block(f, "MASS", 0, self.gas.dens)
+        else:
+            if (self.gas.mass is not None):
+                ws.write_block(f, "MASS", 0, self.gas.mass)
+            ws.write_block(f, "RHO ", 0, self.gas.dens)
+        if (self.gas.utherm is not None):
+            ws.write_block(f, "U   ", 0, self.gas.utherm)
         ws.write_block(f, "ID  ", 0, self.gas.ids)
 
         if (Nparticle > 0):
@@ -406,35 +422,38 @@ def assign_primitive_variables_2d(disk,disk_mesh):
             
         
         #cell ids
-        ids = np.arange(1,R.shape[0]+1,1)
+        ids = np.arange(1,R.shape[0]+1,1) # Default ID assignment
+
         #check for boundaries, first inside the boundary
         if (disk_mesh.N_inner_boundary_rings > 0):
-            ind_inner = (R > disk_mesh.Rin) & (R < (disk_mesh.Rin + disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
+            ind_inner_inside = (R > disk_mesh.Rin) & (R < (disk_mesh.Rin + disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
         else:
-            ind_inner = np.repeat(0,R.shape[0]).astype(bool)
+            ind_inner_inside = np.repeat(0,R.shape[0]).astype(bool)
         if (disk_mesh.N_outer_boundary_rings > 0):                
-            ind_outer = (R < disk_mesh.Rout) & (R > (disk_mesh.Rout - disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
+            ind_outer_inside = (R < disk_mesh.Rout) & (R > (disk_mesh.Rout - disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
         else:
-            ind_outer = np.repeat(0,R.shape[0]).astype(bool)
-        ids[ind_inner+ind_outer] = -1
+            ind_outer_inside = np.repeat(0,R.shape[0]).astype(bool)
+        ids[ind_inner_inside+ind_outer_inside] = -1
+
+        
         #now outside the boundary
         if (disk_mesh.N_inner_boundary_rings > 0):
-            ind_inner = (R < disk_mesh.Rin) & (R > (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
+            ind_inner_outside = (R < disk_mesh.Rin) & (R > (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
         else:
-            ind_inner = np.repeat(0,R.shape[0]).astype(bool)
+            ind_inner_outside = np.repeat(0,R.shape[0]).astype(bool)
         if (disk_mesh.N_outer_boundary_rings > 0):    
-            ind_outer = (R > disk_mesh.Rout) & (R < (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
+            ind_outer_outside = (R > disk_mesh.Rout) & (R < (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
         else:
-            ind_outer = np.repeat(0,R.shape[0]).astype(bool)
-        ids[ind_inner+ind_outer] = -2
+            ind_outer_outside = np.repeat(0,R.shape[0]).astype(bool)
+        ids[ind_inner_outside+ind_outer_outside] = -2
 
         if (disk.sigma_back is not None):
-            print disk.sigma_back
-            dens[ind_inner+ind_outer] = disk.sigma_back
+            dens[ind_inner_outside+ind_outer_outside] = disk.sigma_back
             vr[dens <= disk.sigma_back] = 0
             vphi[dens <= disk.sigma_back] = 0
             press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
-        
+
+            
         #or buffer cells (only if there are boundaries at the interface)
         ind_inner = (R < (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
         ind_outer = (R > (disk_mesh.Rout + disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
