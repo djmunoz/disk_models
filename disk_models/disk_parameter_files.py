@@ -13,6 +13,139 @@ Date created: 11/20/2016
 __author__= 'Diego J. Munoz'
 
 import numpy as np
+from collections import OrderedDict
+
+
+# Dictionary containing all possible parameters
+parameters_basic = {
+    "InitCondFile":"init_cond_file",
+    "OutputDir":"output_dir",
+    "SnapshotFileBase":"snapshot_file_base",
+    "OutputListFilename":"output_list_filename",
+    # File formats
+    "ICFormat":"ic_format",
+    "SnapFormat":"snap_format",
+    # CPU options
+    "TimeLimitCPU":"time_limit_cpu",
+    "CpuTimeBetRestartFile":"cpu_time_bet_restart_file",
+    "ResubmitOn":"resubmit_on",
+    "ResubmitCommand":"resubmit_command",
+    # Memory allocation
+    "MaxMemSize":"max_mem_size",
+    # Run time
+    "TimeBegin":"time_begin",
+    "TimeMax":"time_max",
+    # Basic options
+    "ComovingIntegrationOn":"comoving_integration_on",
+    "PeriodicBoundariesOn":"periodic_boundaries_on",
+    "CoolingOn":"cooling_on",
+    "StarformationOn":"star_formation_on",
+    # Cosmological parameters
+    "Omega0":"omega0",
+    "OmegaLambda":"omega_lambda",
+    "OmegaBaryon":"omega_baryon",
+    "HubbleParam":"hubble_param",
+    "BoxSize":"box_size",
+    # Output properties
+    "OutputListOn":"output_list_on",
+    "TimeBetSnapshot":"time_bet_snapshot",
+    "TimeOfFirstSnapshot":"time_of_first_snapshot",
+    "TimeBetStatistics":"time_bet_statistics",
+    "NumFilesPerSnapshot":"num_files_per_snapshot",
+    "NumFilesWrittenInParallel":"num_files_written_in_parallel",
+    # Integration options
+    "TypeOfTimestepCriterion":"type_of_timestep_criterion",
+    "ErrTolIntAccuracy":"err_tol_int_accuracy",
+    "CourantFac":"courant_fac",
+    "MaxSizeTimestep":"max_size_timestep",
+    "MinSizeTimestep":"min_size_timestep",
+    # Background properties
+    "InitGasTemp":"init_gas_temp",
+    "MinGasTemp":"min_gas_temp",
+    "MinimumDensityOnStartUp":"minimum_density_on_startup",
+    "LimitUBelowThisDensity":"limit_u_below_this_density",
+    "LimitUBelowCertainDensityToThisValue":"limit_u_below_certain_density_to_this_value",
+    "MinEgySpec":"min_egy_spec",
+    # Tree, domain decomposition
+    "TypeOfOpeningCriterion":"type_of_opening_criterion",
+    "ErrTolTheta":"err_tol_theta",
+    "ErrTolForceAcc":"err_tol_force_acc",
+    "MultipleDomains":"multiple_domains",
+    "TopNodeFactor":"top_node_factor",
+    "ActivePartFracForNewDomainDecomp":"active_part_frac_for_new_domain_decomp",
+    # Initial density estimate
+    "DesNumNgb":"des_num_ngb",
+    "MaxNumNgbDeviation":"max_num_ngb_deviation",
+    # Units
+    "UnitLength_in_cm":"unit_length_in_cm",
+    "UnitMass_in_g":"unit_mass_in_g",
+    "UnitVelocity_in_cm_per_s":"unit_velocity_in_cm_per_s",
+    # Gravitational softenings
+    "GravityConstantInternal":"gravity_constant_internal",
+    "SofteningComovingType0":"softening_comoving_type_0",
+    "SofteningComovingType1":"softening_comoving_type_1",
+    "SofteningComovingType2":"softening_comoving_type_2",
+    "SofteningComovingType3":"softening_comoving_type_3",
+    "SofteningComovingType4":"softening_comoving_type_4",
+    "SofteningComovingType5":"softening_comoving_type_5",
+    "SofteningMaxPhysType0":"softening_max_phys_type_0",
+    "SofteningMaxPhysType1":"softening_max_phys_type_1",
+    "SofteningMaxPhysType2":"softening_max_phys_type_2",
+    "SofteningMaxPhysType3":"softening_max_phys_type_3",
+    "SofteningMaxPhysType4":"softening_max_phys_type_4",
+    "SofteningMaxPhysType5":"softening_max_phys_type_5",
+    "SofteningTypeOfPartType0":"softening_type_of_part_type_0",
+    "SofteningTypeOfPartType1":"softening_type_of_part_type_1",
+    "SofteningTypeOfPartType2":"softening_type_of_part_type_2",
+    "SofteningTypeOfPartType3":"softening_type_of_part_type_3",
+    "SofteningTypeOfPartType4":"softening_type_of_part_type_4",
+    "SofteningTypeOfPartType5":"softening_type_of_part_type_5",                  
+    # Mesh options
+    "GasSoftFactor":"gas_soft_factor",
+    "CellShapingSpeed":"cell_shaping_speed",
+    "CellMaxAngleFactor":"cell_max_angle_factor",
+    # Refinement options
+    "MeanVolume":"mean_volume",
+    "ReferenceGasPartMass":"reference_gas_part_mass",
+    "TargetGasMassFactor":"target_gas_mass_factor",
+    "RefinementCriterion":"refinement_criterion",
+    "DerefinementCriterion":"derefinement_criterion",
+    "MaxVolumeDiff":"max_volume_diff",
+    "MinVolume":"min_volume",
+    "MaxVolume":"max_volume"
+}
+
+parameters_other = OrderedDict([
+    # Circumstellar disk options
+    ("IsoSoundSpeed","iso_sound_speed"),
+    ("AlphaCoefficient","alpha_coefficient"),
+    ("InnerRadius","inner_radius"),
+    ("OuterRadius","outer_radius"),
+    ("EvanescentBoundaryStrength","evanescent_boundary_strength"),
+    ("CircumstellarBoundaryDensity","circumstellar_boundary_density"),
+    ("MaxBackgroundVolume","max_background_volume"),
+    ("MinBackgroundVolume","min_background_volume"),
+    ("MinBackgroundMass","min_background_mass"),
+    ("IgnoreRefinementsBeyondThisRadius","ignore_refinements_beyond_this_radius"),
+    ("IgnoreRefinementsWithinThisRadius","ignore_refinements_within_this_radius"),
+    # Boundaries options
+    ("BoundaryLayerScaleFactor","boundary_layer_scale_factor"),
+    ("SpecialBoundarySpeed","special_boundary_speed"),
+    ("SpecialBoundaryMotion","special_boundary_motion"),
+    ("SpecialBoundaryType","special_boundary_type"),
+    ("OutflowPressure","outflow_pressure"),
+    # Binary options
+    ("BinaryMassRatio","binary_mass_ratio"),
+    ("BinarySoftening","binary_softening"),
+    ("BinaryGrowthTime","binary_growth_time"),
+    ("BinaryEccentricity","binary_eccentricity"),
+    ("BinaryBarycentricCoord","binary_barycentric_coord"),
+    # Accretion options
+    ("CircumstellarSinkRadius","circumstellar_sink_radius"), 
+    ("CircumstellarSinkCriterion","circumstellar_sink_criterion"),
+    ("CircumstellarSinkEfficiency","circumstellar_sink_efficiency") 
+])
+
 
 
 class paramfile():
@@ -305,6 +438,7 @@ class paramfile():
     def write(self,filename):
 
         f = open(filename,'w')
+
         f.write("\n%----  Relevant files\n")
         f.write("InitCondFile\t\t %s\n" % self.init_cond_file)
         f.write("OutputDir\t\t %s\n" % self.output_dir)
@@ -339,7 +473,7 @@ class paramfile():
         f.write("OmegaLambda\t %s\n" % self.omega_lambda)                                     
         f.write("OmegaBaryon\t %s\n" % self.omega_baryon)                                     
         f.write("HubbleParam\t %s\n" % self.hubble_param)                                     
-        f.write("BoxSize\t\t %5.1f\n" % self.box_size)
+        f.write("BoxSize\t\t %s\n" % self.box_size)
 
         f.write("\n%---- Output frequency and output paramaters\n")
         f.write("OutputListOn\t\t\t %s\n" % self.output_list_on)                                    
@@ -409,28 +543,178 @@ class paramfile():
         f.write("CellMaxAngleFactor\t %s\n" % self.cell_max_angle_factor)                              
 
         f.write("\n%---- Refinement options\n")
-        f.write("MeanVolume\t\t %s\n" % self.mean_volume)
-        f.write("ReferenceGasPartMass\t %8.4e\n" % self.reference_gas_part_mass)
+        f.write("ReferenceGasPartMass\t %s\n" % self.reference_gas_part_mass)
         f.write("TargetGasMassFactor\t %s\n" % self.target_gas_mass_factor)
         f.write("RefinementCriterion\t %s\n" % self.refinement_criterion)
         f.write("DerefinementCriterion\t %s\n" % self.derefinement_criterion)
-        f.write("MaxVolumeDiff\t\t %f\n" % self.max_volume_diff)
-        f.write("MinVolume\t\t %6.2e\n" % self.min_volume)
-        f.write("MaxVolume\t\t %6.2e\n" % self.max_volume)
+        f.write("MaxVolumeDiff\t\t %s\n" % self.max_volume_diff)
+        f.write("MinVolume\t\t %s\n" % self.min_volume)
+        f.write("MaxVolume\t\t %s\n" % self.max_volume)
 
         
         # Optional parameters
         f.write("\n%---- Other options\n")
-        if (self.central_mass is not None):
-            f.write("CentralMass\t\t %6.2e\n" % self.central_mass)
-        if (self.softening_central_mass is not None):
-            f.write("SofteningCentral\t %6.2e\n" % self.softening_central_mass)
+        for paramname in parameters_other:
+            attr= parameters_other[paramname]
+            if attr in self.__dict__.keys():
+                if (attr is not None):
+                    paramname= parameters_other.keys()[parameters_other.values().index(attr)]
+                    if (len(paramname) > 25):
+                        f.write("%s\t%s\n" % (paramname, getattr(self,attr)))
+                    elif (len(paramname) > 15):
+                        f.write("%s\t\t%s\n" % (paramname, getattr(self,attr)))
+                    else:
+                        f.write("%s\t\t\t%s\n" % (paramname, getattr(self,attr)))
 
-        print self.iso_sound_speed
-        if (self.iso_sound_speed is not None):
-            f.write("IsoSoundSpeed\t %6.2e\n" % self.iso_sound_speed)
+        # Disk parameters
 
-        
+
+        # Boundary parameters
+
+        # Binary parameters
 
             
         f.close()
+
+        
+    def read(self,filename):
+        '''
+        Method of the paramfile class to read in a plain text parameter
+        file and load the parameters of the class.
+
+        '''
+
+        with open(filename) as f:
+            for line in f:
+                if ('%' in line[0]): continue
+                if not line.strip(): continue
+                paramname = line.split(' ')[0]
+                if ('\t' in paramname): paramname=paramname.split('\t')[0]
+                paramval = line[len(paramname):].strip()
+                if (' ' in paramval): paramval = paramval.split(' ')[0]
+                if (parameters_basic.has_key(paramname)):
+                    setattr(self, parameters_basic[paramname], paramval)
+                if (parameters_other.has_key(paramname)):
+                    setattr(self, parameters_other[paramname], paramval)
+                    
+                '''
+                # Files
+                if "InitCondFile" in line:
+                if "OutputDir" in line:
+                if "SnapshotFileBase" in line:
+                if "OutputListFilename" in line:
+
+                # File formats
+                if "ICFormat" in line:
+                if "SnapFormat" in line:
+
+                # CPU options
+                if "TimeLimitCPU" in line:
+                if "CpuTimeBetRestartFile" in line:
+                if "ResubmitOn" in line:
+                if "ResubmitCommand" in line:
+
+                # Memory allocation
+                if "MaxMemSize" in line:
+
+                # Run time
+                if "TimeBegin" in line:
+                if "TimeMax" in line:
+
+                # Basic options
+                if "ComovingIntegrationOn" in line:
+                if "PeriodicBoundariesOn" in line:
+                if "CoolingOn" in line:
+                if "StarformationOn" in line:
+
+                # Cosmological parameters
+                if "Omega0" in line:
+                if "OmegaLambda" in line:
+                if "OmegaBaryon" in line:
+                if "HubbleParam" in line:
+                if "BoxSize" in line:
+
+                # Output properties
+                if "OutputListOn" in line:
+                if "TimeBetSnapshot" in line:
+                if "TimeOfFirstSnapshot" in line:
+                if "TimeBetStatistics" in line:
+                if "NumFilesPerSnapshot" in line:
+                if "NumFilesWrittenInParallel" in line:
+
+                # Integration options
+                if "TypeOfTimestepCriterion" in line:
+                if "ErrTolIntAccuracy" in line:
+                if "CourantFac" in line:
+                if "MaxSizeTimestep" in line:
+                if "MinSizeTimestep" in line:
+                
+                # Background properties
+                if "InitGasTemp" in line:
+                if "MinGasTemp" in line:
+                if "MinimumDensityOnStartUp" in line:
+                if "LimitUBelowThisDensity" in line:
+                if "LimitUBelowCertainDensityToThisValue" in line:
+                if "MinEgySpec" in line:
+
+                # Tree, domain decomposition
+                if "TypeOfOpeningCriterion" in line:
+                if "ErrTolTheta" in line:
+                if "ErrTolForceAcc" in line:
+                if "MultipleDomains" in line:
+                if "TopNodeFactor" in line:
+                if "ActivePartFracForNewDomainDecomp" in line:
+
+                # Initial density estimate
+                if "DesNumNgb" in line:
+                if "MaxNumNgbDeviation" in line:
+                
+                # Units
+                if "UnitLength_in_cm" in line:
+                if "UnitMass_in_g" in line:
+                if "UnitVelocity_in_cm_per_s" in line:
+                
+                # Gravitational softenings
+                if "GravityConstantInternal" in line:
+                if "SofteningComovingType0" in line:
+                if "SofteningComovingType1" in line:
+                if "SofteningComovingType2" in line:
+                if "SofteningComovingType3" in line:
+                if "SofteningComovingType4" in line:
+                if "SofteningComovingType5" in line:
+                if "SofteningMaxPhysType0" in line:
+                if "SofteningMaxPhysType1" in line:
+                if "SofteningMaxPhysType2" in line:
+                if "SofteningMaxPhysType3" in line:
+                if "SofteningMaxPhysType4" in line:
+                if "SofteningMaxPhysType5" in line:
+                if "SofteningTypeOfPartType0" in line:
+                if "SofteningTypeOfPartType1" in line:
+                if "SofteningTypeOfPartType2" in line:
+                if "SofteningTypeOfPartType3" in line:
+                if "SofteningTypeOfPartType4" in line:
+                if "SofteningTypeOfPartType5" in line:                    
+        
+                # Mesh options
+                if "GasSoftFactor" in line:
+                if "CellShapingSpeed" in line:
+                if "CellMaxAngleFactor" in line:
+                
+                # Refinement options
+                if "MeanVolume" in line:
+                if "ReferenceGasPartMass" in line:
+                if "TargetGasMassFactor" in line:
+                if "RefinementCriterion" in line:
+                if "DerefinementCriterion" in line:
+                if "MaxVolumeDiff" in line:
+                if "MinVolume" in line:
+                if "MaxVolume" in line:
+
+
+
+                # Circumstellar disk option
+
+                # Boundary options
+
+                # Binary options
+                '''
