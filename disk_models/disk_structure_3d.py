@@ -56,367 +56,408 @@ def soundspeed(R,csnd0,l,R0):
 
 
 class disk3d(object):
-    def __init__(self, *args, **kwargs):
-        #units
-        self.G =  kwargs.get("G")
-        
-        #define the properties of the axi-symmetric disk model
-        self.sigma_type = kwargs.get("sigma_type")
-        self.sigma_disk = None
-        self.sigma_cut = kwargs.get("sigma_cut")
-
-
-        #Temperature profile properties
-        self.csndR0 = kwargs.get("csndR0") #reference radius
-        self.csnd0 = kwargs.get("csnd0") # soundspeed scaling
-        self.l = kwargs.get("l") # temperature profile index
-
-        #thermodynamic parameters
-        self.adiabatic_gamma = kwargs.get("adiabatic_gamma")
-        self.effective_gamma = kwargs.get("effective_gamma")        
-        
-        #viscosity
-        self.alphacoeff = kwargs.get("alphacoeff")   
-
-        #central object
-        self.Mcentral = kwargs.get("Mcentral")
-        self.Mcentral_soft = kwargs.get("Mcentral_soft")
-        self.quadrupole_correction =  kwargs.get("quadrupole_correction")
-        # potential type
-        self.potential_type = kwargs.get("potential_type")
-        
-        # other properties
-        self.self_gravity = kwargs.get("self_gravity")
-        self.central_particle = kwargs.get("central_particle")
-
-        #set defaults
-        if (self.G is None):
-            self.G = 1.0
-        if (self.sigma_type is None):
-            self.sigma_type="powerlaw"
-        if (self.l is None):
-            self.l = 1.0
-        if (self.csnd0 is None):
-            self.csnd0 = 0.05
-        if (self.adiabatic_gamma is None):
-            self.adiabatic_gamma = 7.0/5
-        if (self.effective_gamma is None):
-            self.effective_gamma = 1.0
-        if (self.alphacoeff is None):
-            self.alphacoeff = 0.01
-        if (self.Mcentral is None):
-            self.Mcentral = 1.0
-        if (self.Mcentral_soft is None):
-            self.Mcentral_soft = 0.01
-        if (self.quadrupole_correction is None):
-            self.quadrupole_correction = 0
-        if (self.potential_type is None):
-            self.potential_type="keplerian"
-            
-        if (self.sigma_type == "powerlaw"):
-            self.sigma_disk = powerlaw_disk(**kwargs)
-            if (self.csndR0 is None):
-                self.csndR0 = self.sigma_disk.R0
-
-        if (self.sigma_type == "similarity"):
-            self.sigma_disk = similarity_disk(**kwargs)
-            if (self.csndR0 is None):
-                self.csndR0 = self.sigma_disk.Rc
-
-        if (self.sigma_type == "powerlaw_cavity"):
-            self.sigma_disk = powerlaw_cavity_disk(**kwargs)
-            if (self.csndR0 is None):
-                self.csndR0 = self.sigma_disk.R_cav
-
-        if (self.sigma_type == "similarity_cavity"):
-            self.sigma_disk = similarity_cavity_disk(**kwargs)
-            if (self.csndR0 is None):
-                self.csndR0 = self.sigma_disk.Rc
-
-                
-        if (self.sigma_cut is None):
-            self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
-
-        if (self.self_gravity is None):
-            self.self_gravity = False
-
-        if (self.central_particle is None):
-            self.central_particle = False
-
-            
-    def evaluate_sigma(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        sigma = self.sigma_disk.evaluate(rvals)
-        sigma[sigma < self.sigma_cut] = self.sigma_cut
-        return rvals,sigma
-
-    def evaluate_enclosed_mass(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        def mass_integrand(R):
-            sigma = self.sigma_disk.evaluate(R)
-            if (sigma < self.sigma_cut) : sigma = self.sigma_cut
-            return sigma * R * 2 * np.pi
-        mass = [quad(mass_integrand,0.0,R)[0] for R in rvals]
-        return rvals, mass
-
-    def compute_disk_mass(self,Rin,Rout):
-        __, mass =  self.evaluate_enclosed_mass(Rin,Rout,Nvals=2)
-        return mass[1]
-        
+  
+  def __init__(self, *args, **kwargs):
+    #units
+    self.G =  kwargs.get("G")
     
-    def evaluate_soundspeed(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        return rvals,soundspeed(rvals,self.csnd0,self.l,self.csndR0)
-
-    def evaluate_pressure_2d(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        return rvals, self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]**(self.effective_gamma) * \
-            self.evaluate_soundspeed(Rin,Rout,Nvals,scale=scale)[1]**2
-
-    def evaluate_viscosity(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals,csnd =  self.evaluate_soundspeed(Rin,Rout,Nvals,scale=scale)
-        Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
-        nu = self.alphacoeff * csnd * csnd / np.sqrt(Omega_sq)
-        return rvals, nu
+    #define the properties of the axi-symmetric disk model
+    self.sigma_type = kwargs.get("sigma_type")
+    self.sigma_disk = None
+    self.sigma_cut = kwargs.get("sigma_cut")
     
-    def evaluate_pressure_gradient(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals, press = self.evaluate_pressure_2d(Rin,Rout,Nvals,scale=scale)
-        _, dPdR = self.evaluate_radial_gradient(press,Rin,Rout,Nvals,scale=scale)
-        return rvals,dPdR
-
-    def evaluate_angular_freq_central_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2)
-        return rvals, Omega_sq
-
-    def evaluate_angular_freq_external_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
-        if (self.potential_type == "keplerian"):
-            return self.evaluate_angular_freq_central_gravity(Rin,Rout,Nvals,scale)
-        
-    def evaluate_angular_freq_self_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
-      rvals, mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
-
-      # First guess at the squared angular velocity
-      vcircsquared_0 = mvals/rvals
-      delta_vcirc,delta_vcirc_old  = 0.0, 1.0e20
-      k1 = 1
-      if (count >0):
-        while(True):
-          def integrand1(x): return GasSigma(x * R_disk) * x**(2.0*k1+1)
-          def integrand2(x): return GasSigma(x * R_disk) / x**(2.0*k1)
-          alpha_k1 = np.pi*(factorial(2*k1)/2.0**(2*k1)/factorial(k1)**2)**2
-          
-          integral1 = quad(integrand1,0.0,radius/R_disk,points=np.linspace(0.0,radius/R_disk,10))[0]
-          integral2 = quad(integrand2,radius/R_disk,np.inf,limit=100)[0]
-          
-          delta_vcirc+=2.0 * alpha_k1 * G * R_disk *((2*k1+1.0)/(radius/R_disk)**(2*k1+1)* integral1 - 2.0*k1 *(radius/R_disk)**(2*k1) *integral2)
-          
-          if (k1 > 30):break
-          abstol,reltol = 1.0e-6,1.0e-5
-          abserr,relerr = np.abs(delta_vcirc_old-delta_vcirc),np.abs(delta_vcirc_old-delta_vcirc)/np.abs(delta_vcirc_old+vcircsquared_0)
-          if (np.abs(delta_vcirc) > abstol/reltol):
-            if (abserr < abstol): break
-          else:
-            if (relerr < reltol): break
-
-          delta_vcirc_old = delta_vcirc
-          k1 = k1 + 1
-     
-        selfgravity_vcirc_in_plane = np.append(selfgravity_vcirc_in_plane,vcircsquared_0+delta_vcirc)
-
-
-
-          
-    def evaluate_angular_freq_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
-         rvals, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale)
-         if (self.self_gravity):
-           _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale)
-           rvals, Omega_sq + Omega_sq_sg
-           
-         return rvals, Omega_sq 
     
-    def evaluate_rotation_curve_2d(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals, Omega_sq  = self.evaluate_angular_freq_gravity(Rin,Rout,Nvals,scale)
-        
-        return rvals, Omega_sq + self.evaluate_pressure_gradient(Rin,Rout,Nvals,scale=scale)[1] / \
-            self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]/ rvals
-
-    def evaluate_toomreQ(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals, csnd = self.evaluate_soundspeed(Rin,Rout,Nvals,scale)
-        _, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale)
-        _, Sigma = self.evaluate_sigma(Rin,Rout,Nvals,scale)
-
-        return rvals, csnd * np.sqrt(Omega_sq) / Sigma / np.pi / self.G
-        
-    def evaluate_radial_velocity(self,Rin,Rout,Nvals=1000,scale='log'):
-        return self.evaluate_radial_velocity_viscous(Rin,Rout,Nvals,scale=scale)
-
-    def evaluate_radial_velocity_viscous(self,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        Omega = np.sqrt(self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2))
-        sigma = (self.evaluate_sigma(Rin,Rout,Nvals,scale)[1])
-        _, dOmegadR = self.evaluate_radial_gradient(Omega,Rin,Rout,Nvals,scale=scale)
-        
-        func1 = (self.evaluate_viscosity(Rin,Rout,Nvals,scale)[1])*\
-            (self.evaluate_sigma(Rin,Rout,Nvals,scale)[1])*\
-            rvals**3*dOmegadR
-        _, dfunc1dR = self.evaluate_radial_gradient(func1,Rin,Rout,Nvals,scale=scale)
-        func2 = rvals**2 * Omega
-        _, dfunc2dR = self.evaluate_radial_gradient(func2,Rin,Rout,Nvals,scale=scale)
-
-        velr = dfunc1dR / rvals / sigma / dfunc2dR
-        velr[sigma <= self.sigma_cut] = 0
-        
-
-        return rvals,velr
-
-    def evaluate_radial_velocity_constant_mdot(self,Rin,Rout,Nvals=1000,scale='log'):
-        
-        return 0
-        
-    def evaluate_radial_gradient(self,quantity,Rin,Rout,Nvals=1000,scale='log'):
-        rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        if (scale == 'log'):
-            dQdlogR = np.gradient(quantity)/np.gradient(np.log10(rvals))
-            dQdR = dQdlogR/rvals/np.log(10)
-        elif (scale == 'linear'):
-            dQdR = np.gradient(quantity)/np.gradient(rvals)
-        return rvals,dQdR
-
-    def evaluate_radial_zones(self,Rin,Rout,Nvals=1000,scale='log'):
-        if (scale == 'log'):
-            rvals = np.logspace(np.log10(Rin),np.log10(Rout),Nvals)
-        elif (scale == 'linear'):
-            rvals = np.linspace(Rin,Rout,Nvals)
-        else: 
-            print "[error] scale type ", scale, "not known!"
-            sys.exit()
-        return rvals
-
-    def evaluate_radial_mass_bins(self,Rin,Rout,Nbins):
-      rvals,mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
-      MasstoRadius=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
-      radial_bins= MasstoRadius(np.linspace(0.0,1.0,Nbins)*max(mvals))
-      return radial_bins
+    #Temperature profile properties
+    self.csndR0 = kwargs.get("csndR0") #reference radius
+    self.csnd0 = kwargs.get("csnd0") # soundspeed scaling
+    self.l = kwargs.get("l") # temperature profile index
     
-    def evaluate_vertical_structure_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
-        
-      m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
+    #thermodynamic parameters
+    self.adiabatic_gamma = kwargs.get("adiabatic_gamma")
+    self.effective_gamma = kwargs.get("effective_gamma")        
+    
+    #viscosity
+    self.alphacoeff = kwargs.get("alphacoeff")   
+    
+    #central object
+    self.Mcentral = kwargs.get("Mcentral")
+    self.Mcentral_soft = kwargs.get("Mcentral_soft")
+    self.quadrupole_correction =  kwargs.get("quadrupole_correction")
+    # potential type
+    self.potential_type = kwargs.get("potential_type")
+    
+    # other properties
+    self.self_gravity = kwargs.get("self_gravity")
+    self.central_particle = kwargs.get("central_particle")
+    
+    #set defaults
+    if (self.G is None):
+      self.G = 1.0
+    if (self.sigma_type is None):
+      self.sigma_type="powerlaw"
+    if (self.l is None):
+      self.l = 1.0
+    if (self.csnd0 is None):
+      self.csnd0 = 0.05
+    if (self.adiabatic_gamma is None):
+      self.adiabatic_gamma = 7.0/5
+    if (self.effective_gamma is None):
+      self.effective_gamma = 1.0
+    if (self.alphacoeff is None):
+      self.alphacoeff = 0.01
+    if (self.Mcentral is None):
+      self.Mcentral = 1.0
+    if (self.Mcentral_soft is None):
+      self.Mcentral_soft = 0.01
+    if (self.quadrupole_correction is None):
+      self.quadrupole_correction = 0
+    if (self.potential_type is None):
+      self.potential_type="keplerian"
       
-      # First take a guess of the vertical structure        
-      if (m_enclosed < 0.1 * self.Mcentral):
-        zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-        VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
-      else:
-        VertProfileNorm = self.sigma_disk.evaluate(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
+    if (self.sigma_type == "powerlaw"):
+      self.sigma_disk = powerlaw_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.R0
+
+    if (self.sigma_type == "similarity"):
+      self.sigma_disk = similarity_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.Rc
+
+    if (self.sigma_type == "powerlaw_cavity"):
+      self.sigma_disk = powerlaw_cavity_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.R_cav
+
+    if (self.sigma_type == "similarity_cavity"):
+      self.sigma_disk = similarity_cavity_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.Rc
+          
+                
+    if (self.sigma_cut is None):
+      self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
+      
+    if (self.self_gravity is None):
+      self.self_gravity = False
+
+    if (self.central_particle is None):
+      self.central_particle = False
+
+            
+  def evaluate_sigma(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    sigma = self.sigma_disk.evaluate(rvals)
+    sigma[sigma < self.sigma_cut] = self.sigma_cut
+    return rvals,sigma
+      
+  def evaluate_enclosed_mass(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    def mass_integrand(R):
+      sigma = self.sigma_disk.evaluate(R)
+      if (sigma < self.sigma_cut) : sigma = self.sigma_cut
+      return sigma * R * 2 * np.pi
+    mass = [quad(mass_integrand,0.0,R)[0] for R in rvals]
+    return rvals, mass
+
+  def compute_disk_mass(self,Rin,Rout):
+    __, mass =  self.evaluate_enclosed_mass(Rin,Rout,Nvals=2)
+    return mass[1]
         
-      VertProfileNorm_old = 1.0e-40
-      if (VertProfileNorm < VertProfileNorm_old): VertProfileNorm = VertProfileNorm_old
+    
+  def evaluate_soundspeed(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    return rvals,soundspeed(rvals,self.csnd0,self.l,self.csndR0)
 
+  def evaluate_pressure_2d(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    return rvals, self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]**(self.effective_gamma) * \
+      self.evaluate_soundspeed(Rin,Rout,Nvals,scale=scale)[1]**2
 
-      def VerticalPotentialEq(Phi,z,r,rho0):
-        dPhiGrad_dz =  rho0 * G* 4 * np.pi * np.exp(-(self.vertical_potential(r,z) + Phi[1]) / soundspeed(r,self.csnd0,self.l,self.csndR0)**2)
-        dPhi_dz = Phi[0]
-        return [dPhiGrad_dz,dPhi_dz]
+  def evaluate_viscosity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals,csnd =  self.evaluate_soundspeed(Rin,Rout,Nvals,scale=scale)
+    Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
+    nu = self.alphacoeff * csnd * csnd / np.sqrt(Omega_sq)
+    return rvals, nu
+    
+  def evaluate_pressure_gradient(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals, press = self.evaluate_pressure_2d(Rin,Rout,Nvals,scale=scale)
+    _, dPdR = self.evaluate_radial_gradient(press,Rin,Rout,Nvals,scale=scale)
+    return rvals,dPdR
 
-      iterate = 0
-      while(True) : #iteration
-        min_step = (zvals[1]-zvals[0])/100.0
-        tol = 1.0e-9
-        # Solve for the vertical potential
-        soln=integ.odeint(VerticalPotentialEq,[0.0,0.0],zvals,args=(R,VertProfileNorm),rtol=tol,
-                          mxords=15,hmin=min_step,printmessg=False)[:,1]
-        zrho0=[np.exp(-(self.vertical_potential(R,zvals[kk])+soln[kk])/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for kk in range(len(zvals))]
-        VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
-        zrho = [VertProfileNorm * r for r in zrho0]
+  def evaluate_angular_freq_central_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2)
+    return rvals, Omega_sq
 
-        if (VertProfileNorm * 1.333 * np.pi * R**3 < 1.0e-12 * self.Mcentral): break
-        # Check if vertical structure solution has converged
-        abstol,reltol = 1.0e-9,1.0e-6
-        abserr,relerr = np.abs(VertProfileNorm_old-VertProfileNorm),np.abs(VertProfileNorm_old-VertProfileNorm)/np.abs(VertProfileNorm_old)
+  def evaluate_angular_freq_external_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    if (self.potential_type == "keplerian"):
+      return self.evaluate_angular_freq_central_gravity(Rin,Rout,Nvals,scale,radii_list)
+    
+  def evaluate_angular_freq_self_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals, mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
+    
+    # First guess at the squared angular velocity
+    vcircsquared_0 = mvals/rvals
+    delta_vcirc,delta_vcirc_old  = 0.0, 1.0e20
+    k1 = 1
+    if (count >0):
+      while(True):
+        def integrand1(x): return GasSigma(x * R_disk) * x**(2.0*k1+1)
+        def integrand2(x): return GasSigma(x * R_disk) / x**(2.0*k1)
+        alpha_k1 = np.pi*(factorial(2*k1)/2.0**(2*k1)/factorial(k1)**2)**2
         
-        if (np.abs(VertProfileNorm) > abstol/reltol):
+        integral1 = quad(integrand1,0.0,radius/R_disk,points=np.linspace(0.0,radius/R_disk,10))[0]
+        integral2 = quad(integrand2,radius/R_disk,np.inf,limit=100)[0]
+        
+        delta_vcirc+=2.0 * alpha_k1 * G * R_disk *((2*k1+1.0)/(radius/R_disk)**(2*k1+1)* integral1 - 2.0*k1 *(radius/R_disk)**(2*k1) *integral2)
+        
+        if (k1 > 30):break
+        abstol,reltol = 1.0e-6,1.0e-5
+        abserr,relerr = np.abs(delta_vcirc_old-delta_vcirc),np.abs(delta_vcirc_old-delta_vcirc)/np.abs(delta_vcirc_old+vcircsquared_0)
+        if (np.abs(delta_vcirc) > abstol/reltol):
           if (abserr < abstol): break
         else:
           if (relerr < reltol): break
-        VertProfileNorm_old = VertProfileNorm
-        iterate += 1
 
+        delta_vcirc_old = delta_vcirc
+        k1 = k1 + 1
+     
+      selfgravity_vcirc_in_plane = np.append(selfgravity_vcirc_in_plane,vcircsquared_0+delta_vcirc)
+
+    return 0
+
+          
+  def evaluate_angular_freq_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale,radii_list)
+    if (self.self_gravity):
+      _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale,radii_list)
+      rvals, Omega_sq + Omega_sq_sg
+      
+    return rvals, Omega_sq 
+    
+  def evaluate_rotation_curve_2d(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals, Omega_sq  = self.evaluate_angular_freq_gravity(Rin,Rout,Nvals,scale,radii_list)
+    
+    return rvals, Omega_sq + self.evaluate_pressure_gradient(Rin,Rout,Nvals,scale=scale)[1] / \
+      self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]/ rvals
+
+  def evaluate_toomreQ(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals, csnd = self.evaluate_soundspeed(Rin,Rout,Nvals,scale,radii_list)
+    _, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale,radii_list)
+    _, Sigma = self.evaluate_sigma(Rin,Rout,Nvals,scale,radii_list)
+
+    return rvals, csnd * np.sqrt(Omega_sq) / Sigma / np.pi / self.G
+        
+
+  def evaluate_radial_velocity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    return self.evaluate_radial_velocity_viscous(Rin,Rout,Nvals,scale=scale)
+
+  def evaluate_radial_velocity_viscous(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    Omega = np.sqrt(self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2))
+    sigma = (self.evaluate_sigma(Rin,Rout,Nvals,scale,radii_list)[1])
+    _, dOmegadR = self.evaluate_radial_gradient(Omega,Rin,Rout,Nvals,scale=scale)
+    
+    func1 = (self.evaluate_viscosity(Rin,Rout,Nvals,scale,radii_list)[1])*\
+            (self.evaluate_sigma(Rin,Rout,Nvals,scale,radii_list)[1])*\
+            rvals**3*dOmegadR
+    _, dfunc1dR = self.evaluate_radial_gradient(func1,Rin,Rout,Nvals,scale=scale)
+    func2 = rvals**2 * Omega
+    _, dfunc2dR = self.evaluate_radial_gradient(func2,Rin,Rout,Nvals,scale=scale)
+
+    velr = dfunc1dR / rvals / sigma / dfunc2dR
+    velr[sigma <= self.sigma_cut] = 0
+    
+
+    return rvals,velr
+
+  def evaluate_radial_velocity_constant_mdot(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+        
+    return 0
+        
+  def evaluate_radial_gradient(self,quantity,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+    rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
+    if (scale == 'log'):
+      dQdlogR = np.gradient(quantity)/np.gradient(np.log10(rvals))
+      dQdR = dQdlogR/rvals/np.log(10)
+    elif (scale == 'linear'):
+      dQdR = np.gradient(quantity)/np.gradient(rvals)
+    return rvals,dQdR
+
+  
+  def evaluate_radial_zones(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
+
+    if (radii_list is not None):
+      return radii_list
+    
+    if (scale == 'log'):
+      rvals = np.logspace(np.log10(Rin),np.log10(Rout),Nvals)
+    elif (scale == 'linear'):
+      rvals = np.linspace(Rin,Rout,Nvals)
+    else: 
+      print "[error] scale type ", scale, "not known!"
+      sys.exit()
+    return rvals
+
+  def evaluate_radial_mass_bins(self,Rin,Rout,Nbins):
+    rvals,mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
+    MasstoRadius=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
+    radial_bins= MasstoRadius(np.linspace(0.0,1.0,Nbins)*max(mvals))
+    return radial_bins
+    
+  def evaluate_vertical_structure_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
+        
+    m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
+    
+    # First take a guess of the vertical structure        
+    if (m_enclosed < 0.1 * self.Mcentral):
+      zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+      VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+    else:
+      VertProfileNorm = self.sigma_disk.evaluate(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
+        
+    VertProfileNorm_old = 1.0e-40
+    if (VertProfileNorm < VertProfileNorm_old): VertProfileNorm = VertProfileNorm_old
+
+
+    def VerticalPotentialEq(Phi,z,r,rho0):
+      dPhiGrad_dz =  rho0 * G* 4 * np.pi * np.exp(-(self.vertical_potential(r,z) + Phi[1]) / soundspeed(r,self.csnd0,self.l,self.csndR0)**2)
+      dPhi_dz = Phi[0]
+      return [dPhiGrad_dz,dPhi_dz]
+
+    iterate = 0
+    while(True) : #iteration
+      min_step = (zvals[1]-zvals[0])/100.0
+      tol = 1.0e-9
+      # Solve for the vertical potential
+      soln=integ.odeint(VerticalPotentialEq,[0.0,0.0],zvals,args=(R,VertProfileNorm),rtol=tol,
+                        mxords=15,hmin=min_step,printmessg=False)[:,1]
+      zrho0=[np.exp(-(self.vertical_potential(R,zvals[kk])+soln[kk])/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for kk in range(len(zvals))]
+      VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+      zrho = [VertProfileNorm * r for r in zrho0]
+
+      if (VertProfileNorm * 1.333 * np.pi * R**3 < 1.0e-12 * self.Mcentral): break
+      # Check if vertical structure solution has converged
+      abstol,reltol = 1.0e-9,1.0e-6
+      abserr,relerr = np.abs(VertProfileNorm_old-VertProfileNorm),np.abs(VertProfileNorm_old-VertProfileNorm)/np.abs(VertProfileNorm_old)
+        
+      if (np.abs(VertProfileNorm) > abstol/reltol):
+        if (abserr < abstol): break
+      else:
+        if (relerr < reltol): break
+      VertProfileNorm_old = VertProfileNorm
+      iterate += 1
+
+    return zvals,zrho,VertProfileNorm
+
+  def evaluate_vertical_structure_no_selfgravity(self,R,zin,zout,Nzvals=400):
+    if (zin > 0):
+      zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
+    else:
+      zvals = np.append(0,np.logspace(-6,np.log10(zout),Nzvals))
+        
+      #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
+      #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
+      zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+      VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+      #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+      zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
       return zvals,zrho,VertProfileNorm
 
-    def evaluate_vertical_structure_no_selfgravity(self,R,zin,zout,Nzvals=400):
-      if (zin > 0):
-        zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
-      else:
-        zvals = np.append(0,np.logspace(-6,np.log10(zout),Nzvals))
+  def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
+    if (self.self_gravity):
+      return self.evaluate_vertical_structure_selfgravity(R,zin,zout,Nzvals)
+    else:
+      return self.evaluate_vertical_structure_no_selfgravity(R,zin,zout,Nzvals)
         
-        #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
-        #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
-        zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-        VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
-        #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-        zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
-        return zvals,zrho,VertProfileNorm
-
-    def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
-        if (self.self_gravity):
-            return self.evaluate_vertical_structure_selfgravity(R,zin,zout,Nzvals)
-        else:
-            return self.evaluate_vertical_structure_no_selfgravity(R,zin,zout,Nzvals)
-        
-    def evaluate_enclosed_vertical(self,R,zin,zout,Nzvals=400):
-        zvals, zrho, _ = self.evaluate_vertical_structure(R,zin,zout,Nzvals)
-        zmass = np.append(0,cumtrapz(zrho,zvals))
-        return zvals, zmass
+  def evaluate_enclosed_vertical(self,R,zin,zout,Nzvals=400):
+    zvals, zrho, _ = self.evaluate_vertical_structure(R,zin,zout,Nzvals)
+    zmass = np.append(0,cumtrapz(zrho,zvals))
+    return zvals, zmass
+  
+  def spherical_potential(self,r):
+    if (self.potential_type == "keplerian"):
+      return -self.G * self.Mcentral * spherical_potential_keplerian(r,self.Mcentral_soft)
     
-    def spherical_potential(self,r):
-        if (self.potential_type == "keplerian"):
-            return -self.G * self.Mcentral * spherical_potential_keplerian(r,self.Mcentral_soft)
-    
-    def vertical_potential(self,R,z):
-        return (self.spherical_potential(np.sqrt(R*R + z*z)) - self.spherical_potential(R))
+  def vertical_potential(self,R,z):
+    return (self.spherical_potential(np.sqrt(R*R + z*z)) - self.spherical_potential(R))
 
   
       
-    def solve_vertical_structure(self,Rsamples,zsamples,Rin,Rout,Ncells):
-
-        dens = np.zeros(Rsamples.shape[0])
+  def solve_vertical_structure(self,Rsamples,zsamples,Rin,Rout,Ncells):
+    
+    """
+    Routine to iteratively solve for the vertical structure of an accretion disk.
         
-        if (Ncells < 50000): R_bins = 160
-        elif (Ncells < 100000): R_bins = 200
-        elif (Ncells < 200000): R_bins = 300
-        elif (Ncells < 600000): R_bins   = 400
-        else: R_bins = 500
-        radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
-        #fix the bins a bit
-        dRin = radial_bins[1]-radial_bins[0]
-        radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/30,radial_bins[1],dRin/30),radial_bins[1:]))
-        
-        bin_inds=np.digitize(Rsamples,radial_bins)
-        mid_plane = []
-        radii = []
-        
-        zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
+    Parameters
+    ----------
+    first : array_like
+    the 1st param name `first`
+    second :
+    the 2nd param
+    third : {'value', 'other'}, optional
+    the 3rd param, by default 'value'
+    
+    Returns
+    -------
+    string
+    a value in a string
+    
+    Raises
+    ------
+    KeyError
+    when a key error
+    OtherError
+    when an other error
+    """
+      
+      
+    dens = np.zeros(Rsamples.shape[0])
 
-        print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
-        for kk in range(0,radial_bins.shape[0]):
-            update_progress(kk,radial_bins.shape[0])
-            print kk,radial_bins.shape[0]
-            N_in_bin = Rsamples[bin_inds == kk].shape[0]
-            if (N_in_bin == 0):
-                mid_plane.append(0.0)
-                radii.append(radial_bins[kk])
-                continue
-            #if (N_in_bin < 10) & (zout > 5*(z[bin_inds == kk]).mean()): #| (zout/200 > np.abs(z[bin_inds == kk]).max()):
-            #    zout = np.abs(z[bin_inds == kk]).mean()*5
-            bin_radius = Rsamples[bin_inds == kk].mean()
-            zvals,zrhovals,rho0 = self.evaluate_vertical_structure(bin_radius,zin,zout,Nzvals=800)
-            mid_plane.append(rho0)
-            radii.append(bin_radius)
-            dens_profile = interp1d(zvals,zrhovals,kind='linear')
-            dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))
 
-        return dens,np.array(radii),np.array(mid_plane)
+    grided = np.unique(Rsamples).shape[0] < Rsamples.shape    # Are the mesh point locations grided?
+    
+    
+    if not (grided):
+      if (Ncells < 50000): R_bins = 160
+      elif (Ncells < 100000): R_bins = 200
+      elif (Ncells < 200000): R_bins = 300
+      elif (Ncells < 600000): R_bins   = 400
+      else: R_bins = 500
+      radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
+      #fix the bins a bit
+      dRin = radial_bins[1]-radial_bins[0]
+      radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/30,radial_bins[1],dRin/30),radial_bins[1:]))
+    else:
+      radial_bins = np.unique(Rsamples)
+      
+    bin_inds=np.digitize(Rsamples,radial_bins)
+    mid_plane = []
+    radii = []
+        
+    zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
+    
+    print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
+    for kk in range(0,radial_bins.shape[0]):
+      update_progress(kk,radial_bins.shape[0])
+      N_in_bin = Rsamples[bin_inds == kk].shape[0]
+      if (N_in_bin == 0):
+        mid_plane.append(0.0)
+        radii.append(radial_bins[kk])
+        continue
+      #if (N_in_bin < 10) & (zout > 5*(z[bin_inds == kk]).mean()): #| (zout/200 > np.abs(z[bin_inds == kk]).max()):
+      #    zout = np.abs(z[bin_inds == kk]).mean()*5
+      bin_radius = Rsamples[bin_inds == kk].mean()
+      zvals,zrhovals,rho0 = self.evaluate_vertical_structure(bin_radius,zin,zout,Nzvals=800)
+      mid_plane.append(rho0)
+      radii.append(bin_radius)
+      dens_profile = interp1d(zvals,zrhovals,kind='linear')
+      dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))
+
+    radii, mid_plane = np.array(radii),np.array(mid_plane)
+
+    return dens,np.array(radii),np.array(mid_plane)
         
     
 class disk_mesh3d():
@@ -516,7 +557,31 @@ class disk_mesh3d():
         # compute z-coordinate
         z = R * np.sin(lat)
 
+        if (self.fill_background | self.fill_center | self.fill_box):
+            Radditional, phiadditional, zadditional = np.empty([0]),np.empty([0]),np.empty([0])
+            
+            self.zmax = np.abs(z).max()
+            zmax  = np.abs(z).max()
+            Rmin  = R.min()
+            Rmax  = R.max()
 
+            if  (self.fill_background):
+              Rback,phiback,zback = self.mc_fill_background(disk,0.1 * R.shape[0])
+              Radditional, phiadditional, zadditional = np.append(Radditional,Rbacl),\
+                                                        np.append(phiadditional,phiback),\
+                                                        np.append(zadditional,zcback)
+              
+              zmax = max(zmax,np.abs(zadditional).max())
+              Rmax = max(Rmax,np.abs(Radditional).max())
+              Rmin = min(Rmin,np.abs(Radditional).min())
+
+              
+            R = np.append(R,Radditional)
+            phi = np.append(phi,phiadditional)
+            z = np.append(z,zadditional)
+            
+              
+        
         return R,phi,z
 
       
@@ -811,9 +876,35 @@ class disk_mesh3d():
         return xbox,ybox,zbox
 
 
+    def mc_fill_background(self,disk,Nback):
+      
+      Rback,phiback = self.mc_sample_2d(disk,Npoints = Nback)
+      zback = self.mc_sample_vertical_background(R,Rback,z,disk)
+      Rbackmax = Rback.max()
+      print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+      Radditional = np.append(Radditional,Rback).flatten()
+      phiadditional = np.append(phiadditional,phiback).flatten()
+      zadditional = np.append(zadditional,zback).flatten()
+
+      Lx,Ly,Lz = 2*Rbackmax,2*Rbackmax,np.abs(zback).max()+1.2*(Rbackmax -Rmax)
+      delta = zback.max()/3
+      xback,yback,zback = self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
+      Rback = np.sqrt(xback**2+yback**2)
+      phiback = np.arctan2(yback,xback)
+      ind = Rback > Rbackmax
+      Rback, phiback,zback = Rback[ind], phiback[ind],zback[ind]
+
+      print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+      Radditional = np.append(Radditional,Rback)
+      phiadditional = np.append(phiadditional,phiback)
+      zadditional = np.append(zadditional,zback)
+
+      return Radditional, phiadditional, zadditional
+      
 
             
 
+      
 if __name__=="__main__":
 
 
