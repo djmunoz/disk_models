@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy.random as rd
 from scipy.interpolate import interp1d
 from scipy.integrate import quad, trapz
+from math import factorial
 from scipy.integrate import cumtrapz
 import scipy.integrate as integ
 try:
@@ -19,36 +20,6 @@ from disk_snapshot import *
 
 rd.seed(42)
 
-
-def SplineProfile(R,h):
-  r2 = R*R
-  h_inv = 1.0 / h
-  h3_inv = h_inv * h_inv * h_inv
-  u = R * h_inv
-  wp = -1.0 / R
-
-  ind = u < 0.5
-  wp[ind] = h_inv * (-2.8 + u[ind] * u[ind] * (5.333333333333 + u[ind] * u[ind] * (6.4 * u[ind] - 9.6)))
-  ind = (u >= 0.5) & (u < 1)
-  wp[ind] = h_inv * (-3.2 + 0.066666666667 / u[ind] + u[ind] * u[ind] * (10.666666666667 + u[ind] * (-16.0 + u[ind] * (9.6 - 2.133333333333 * u[ind]))))
-      
-  return -wp
-  
-def SplineDerivative(R,h):
-  r2 = R * R
-  fac = 0.0
-  h_inv = 1.0 / h
-  h3_inv = h_inv * h_inv * h_inv
-  u = R * h_inv
-  
-  fac = 1.0 / (r2 * R)
-  ind = u < 0.5
-  fac[ind] = h3_inv * (10.666666666667 + u[ind] * u[ind] * (32.0 * u[ind] - 38.4))
-  ind = (u >= 0.5) & (u < 1)
-  fac[ind] = h3_inv * (21.333333333333 - 48.0 * u[ind] + 38.4 * u[ind] * u[ind] - 10.666666666667 * u[ind] * u[ind] * u[ind] - 0.066666666667 / \
-                  (u[ind] * u[ind] * u[ind]))
-      
-  return fac
 
 
 def soundspeed(R,csnd0,l,R0):
@@ -124,6 +95,11 @@ class disk3d(object):
       if (self.csndR0 is None):
         self.csndR0 = self.sigma_disk.Rc
 
+    if (self.sigma_type == "similarity_softened"):
+      self.sigma_disk = similarity_softened_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.Rc
+        
     if (self.sigma_type == "powerlaw_cavity"):
       self.sigma_disk = powerlaw_cavity_disk(**kwargs)
       if (self.csndR0 is None):
@@ -195,26 +171,37 @@ class disk3d(object):
       return self.evaluate_angular_freq_central_gravity(Rin,Rout,Nvals,scale,radii_list)
     
   def evaluate_angular_freq_self_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
-    rvals, mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=2000)
     
+    rvals, mvals = self.evaluate_enclosed_mass(Rin,Rout,Nvals=Nvals,scale=scale)
+    rvals_fine, sigma_vals = self.evaluate_sigma(Rin,Rout,Nvals = 3 * Nvals,scale=scale)
     # First guess at the squared angular velocity
     vcircsquared_0 = mvals/rvals
-    delta_vcirc,delta_vcirc_old  = 0.0, 1.0e20
+    selfgravity_vcirc_in_plane = np.zeros(rvals.shape[0])
+    
     k1 = 1
-    if (count >0):
+    R_disk = Rout
+    for jj,radius in enumerate(rvals[1:]):
+      delta_vcirc,delta_vcirc_old  = 0.0, 1.0e20
       while(True):
-        def integrand1(x): return GasSigma(x * R_disk) * x**(2.0*k1+1)
-        def integrand2(x): return GasSigma(x * R_disk) / x**(2.0*k1)
+        #def integrand1(x): return GasSigma(x * R_disk) * x**(2.0*k1+1)
+        #def integrand2(x): return GasSigma(x * R_disk) / x**(2.0*k1)
+        ind1 = rvals_fine <= radius
+        ind2 = rvals_fine >= radius
+        integrand1 = sigma_vals[ind1] * (rvals_fine[ind1])**(2.0*k1 + 1)
+        integrand2 = sigma_vals[ind2] / (rvals_fine[ind2])**(2.0*k1)
         alpha_k1 = np.pi*(factorial(2*k1)/2.0**(2*k1)/factorial(k1)**2)**2
         
-        integral1 = quad(integrand1,0.0,radius/R_disk,points=np.linspace(0.0,radius/R_disk,10))[0]
-        integral2 = quad(integrand2,radius/R_disk,np.inf,limit=100)[0]
+        #integral1 = quad(integrand1,0.0,radius/R_disk,points=np.linspace(0.0,radius/R_disk,10))[0]
+        #integral2 = quad(integrand2,radius/R_disk,np.inf,limit=100)[0]
+        integral1 = trapz(integrand1,x=rvals_fine[ind1])
+        integral2 = trapz(integrand2,x=rvals_fine[ind2])
         
-        delta_vcirc+=2.0 * alpha_k1 * G * R_disk *((2*k1+1.0)/(radius/R_disk)**(2*k1+1)* integral1 - 2.0*k1 *(radius/R_disk)**(2*k1) *integral2)
-        
-        if (k1 > 30):break
-        abstol,reltol = 1.0e-6,1.0e-5
-        abserr,relerr = np.abs(delta_vcirc_old-delta_vcirc),np.abs(delta_vcirc_old-delta_vcirc)/np.abs(delta_vcirc_old+vcircsquared_0)
+        delta_vcirc += 2.0 * alpha_k1 * ((2*k1+1.0)/(radius)**(2*k1+1)* integral1 - 2.0*k1 *(radius)**(2*k1) *integral2)
+
+        if (k1 > 40): break
+        abstol,reltol = 1.0e-7,1.0e-6
+        abserr,relerr = np.abs(delta_vcirc_old-delta_vcirc),np.abs(delta_vcirc_old-delta_vcirc)/np.abs(delta_vcirc_old)#+vcircsquared_0[rvals == radius])
+
         if (np.abs(delta_vcirc) > abstol/reltol):
           if (abserr < abstol): break
         else:
@@ -223,17 +210,19 @@ class disk3d(object):
         delta_vcirc_old = delta_vcirc
         k1 = k1 + 1
      
-      selfgravity_vcirc_in_plane = np.append(selfgravity_vcirc_in_plane,vcircsquared_0+delta_vcirc)
+      selfgravity_vcirc_in_plane[jj+1] =  vcircsquared_0[jj+1]+delta_vcirc
 
-    return 0
+    plt.plot(rvals/12,selfgravity_vcirc_in_plane*12/0.05,'r+')
+    plt.show()
+    return rvals, selfgravity_vcirc_in_plane / rvals**2
 
           
   def evaluate_angular_freq_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale,radii_list)
     if (self.self_gravity):
       _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale,radii_list)
-      rvals, Omega_sq + Omega_sq_sg
-      
+      Omega_sq += Omega_sq_sg
+
     return rvals, Omega_sq 
     
   def evaluate_rotation_curve_2d(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
@@ -309,7 +298,13 @@ class disk3d(object):
   def evaluate_vertical_structure_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
         
     m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
-    
+
+    if (zin > 0):
+      zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
+    else:
+      zvals = np.append(0,np.logspace(-6,np.log10(zout),Nzvals))
+
+      
     # First take a guess of the vertical structure        
     if (m_enclosed < 0.1 * self.Mcentral):
       zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
@@ -341,7 +336,7 @@ class disk3d(object):
       # Check if vertical structure solution has converged
       abstol,reltol = 1.0e-9,1.0e-6
       abserr,relerr = np.abs(VertProfileNorm_old-VertProfileNorm),np.abs(VertProfileNorm_old-VertProfileNorm)/np.abs(VertProfileNorm_old)
-        
+
       if (np.abs(VertProfileNorm) > abstol/reltol):
         if (abserr < abstol): break
       else:
@@ -415,16 +410,15 @@ class disk3d(object):
       
     dens = np.zeros(Rsamples.shape[0])
 
+    grided = np.unique(Rsamples).shape[0] < np.sqrt(Rsamples.shape)    # Are the mesh point locations grided?
 
-    grided = np.unique(Rsamples).shape[0] < Rsamples.shape    # Are the mesh point locations grided?
-    
     
     if not (grided):
       if (Ncells < 50000): R_bins = 160
       elif (Ncells < 100000): R_bins = 200
       elif (Ncells < 200000): R_bins = 300
       elif (Ncells < 600000): R_bins   = 400
-      else: R_bins = 500
+      else: R_bins = 600
       radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
       #fix the bins a bit
       dRin = radial_bins[1]-radial_bins[0]
@@ -439,6 +433,7 @@ class disk3d(object):
     zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
     
     print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
+    print "(using %i radial bins)" % radial_bins.shape[0]
     for kk in range(0,radial_bins.shape[0]):
       update_progress(kk,radial_bins.shape[0])
       N_in_bin = Rsamples[bin_inds == kk].shape[0]
@@ -692,7 +687,8 @@ class disk_mesh3d():
                 rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=100)
                 cellmass = mvals[-1]/self.Ncells
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
-                Rmin = m2r(cellmass)
+                Rmin = np.asscalar(m2r(cellmass))
+                print type(Rmin)
                 sigma_in = disk.sigma_disk.evaluate(Rmin)
                 if (sigma_in < disk.sigma_cut): sigma_in = disk.sigma_cut
                 rho_in = sigma_in/zmax

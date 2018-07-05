@@ -64,6 +64,8 @@ class snapshot():
             dims = 2
         self.load(R,phi,z,dens,None,vphi,vr,press,ids,dims=dims,adiabatic_gamma=disk.adiabatic_gamma)
 
+        print "Minimum density!", dens.min()
+        
         # Check if there is a central particle
         if (disk.central_particle):
             central_particle = particle_data()
@@ -174,7 +176,7 @@ class snapshot():
             self.gas.pos = np.array([x,y,z]).T
             self.gas.vel = np.array([vx,vy,vz]).T
             try:
-                self.gas.utherm = press/self.gas.dens/(adiabatic_gamma - 1)
+                self.gas.utherm = press/dens/(adiabatic_gamma - 1)
             except TypeError:
                 self.gas.utherm = None
             self.gas.ids = ids
@@ -497,7 +499,7 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
     #obtain density of cells
     dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
-    dens_cut = midplane_dens[-1]
+    dens_cut = max(midplane_dens[-1],midplane_dens[midplane_dens > 0].min())
     radii = np.append(radii,R2)
     midplane_dens = np.append(midplane_dens,dens_cut)
     dens[dens < dens_cut] = dens_cut
@@ -506,14 +508,16 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     #weights = np.exp(np.linspace(-1., 0., window_length))
     #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
     dens0_profile =  interp1d(radii,midplane_dens,kind='linear',fill_value='extrapolate')
-
-        
+    print "Minimum density!", dens.min(),dens_cut
+    
     #evaluate other quantities
     Nvals = 1200 # this number being large can be critical when steep pressure gradients are present
     print R.shape,dens.shape,dens.min()
     #plt.plot(R,dens,'b.')
     plt.plot(radii,midplane_dens,'b.')
-    #plt.plot(radii,dens0_profile(radii),color='r')
+    plt.plot(radii,disk.sigma_disk.evaluate(radii),color='r')
+    plt.xscale('log')
+    plt.yscale('log')
     plt.show()
 
     if (disk_mesh.NR is not None):
@@ -525,19 +529,17 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         scale = 'log'
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
 
-    print radii
     while (True):
         radii, angular_frequency_sq = disk.evaluate_angular_freq_gravity(R1,R2,Nvals=Nvals,
                                                                          scale=scale)
-        print radii
+
         _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=Nvals,scale=scale)
         pressure_midplane = dens0_profile(radii) * sound_speed**2
-        plt.plot
+
         _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=Nvals,
                                                                       scale=scale)
         _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2,Nvals=Nvals,
                                                                   scale=scale)
-        print radii.min(),dens0_profile(radii).min(),Nvals,angular_frequency_sq.min(), pressure_midplane_gradient.min()
         if np.all((angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii) > 0):
             break
         else:
@@ -547,7 +549,7 @@ def assign_primitive_variables_3d(disk,disk_mesh):
             print "Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again"
             exit()
                     
-            
+    print "Minimum density!", dens.min(),dens_cut
     angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
             
     #update mesh radial limits
@@ -571,7 +573,8 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     def soundspeed(R): return disk.csnd0 * (R/disk.csndR0)**(-disk.l*0.5)
     press_cut = dens_cut * soundspeed(disk_mesh.Rout)**2
     press[ind_out] = press_cut
-    
+    print "Minimum density!", dens.min(),dens_cut
+        
     ind = R < disk_mesh.Rin 
     vphi[ind] = vphi[ind]*np.exp(-(disk_mesh.Rin-R[ind])**2/R[ind]**2)
     dens[ind] = dens_cut/1000000
@@ -585,6 +588,6 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     vr = np.zeros(R.shape)
     ids = np.arange(1,R.shape[0]+1,1)
     
-        
+    print "Minimum density!", dens.min(),dens_cut
     return R,phi,z,dens,vphi,vr,press,ids
 
