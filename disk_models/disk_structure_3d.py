@@ -22,8 +22,8 @@ rd.seed(42)
 
 
 
-def soundspeed(R,csnd0,l,R0):
-    return csnd0 * (R/R0)**(-l*0.5)
+def soundspeed(R,csnd0,l,R0,soft=1e-5):
+    return csnd0 * (SplineProfile(R,soft) * R0)**(0.5 * l)
 
 
 class disk3d(object):
@@ -99,7 +99,12 @@ class disk3d(object):
       self.sigma_disk = similarity_softened_disk(**kwargs)
       if (self.csndR0 is None):
         self.csndR0 = self.sigma_disk.Rc
-        
+
+    if (self.sigma_type == "similarity_hole"):
+      self.sigma_disk = similarity_hole_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.Rc
+            
     if (self.sigma_type == "powerlaw_cavity"):
       self.sigma_disk = powerlaw_cavity_disk(**kwargs)
       if (self.csndR0 is None):
@@ -143,7 +148,7 @@ class disk3d(object):
     
   def evaluate_soundspeed(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
-    return rvals,soundspeed(rvals,self.csnd0,self.l,self.csndR0)
+    return rvals,soundspeed(rvals,self.csnd0,self.l,self.csndR0,self.Mcentral_soft)
 
   def evaluate_pressure_2d(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
@@ -212,8 +217,7 @@ class disk3d(object):
      
       selfgravity_vcirc_in_plane[jj+1] =  vcircsquared_0[jj+1]+delta_vcirc
 
-    plt.plot(rvals/12,selfgravity_vcirc_in_plane*12/0.05,'r+')
-    plt.show()
+
     return rvals, selfgravity_vcirc_in_plane / rvals**2
 
           
@@ -421,8 +425,8 @@ class disk3d(object):
       else: R_bins = 600
       radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
       #fix the bins a bit
-      dRin = radial_bins[1]-radial_bins[0]
-      radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/30,radial_bins[1],dRin/30),radial_bins[1:]))
+      #dRin = radial_bins[1]-radial_bins[0]
+      #radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/30,radial_bins[1],dRin/30),radial_bins[1:]))
     else:
       radial_bins = np.unique(Rsamples)
       
@@ -650,6 +654,7 @@ class disk_mesh3d():
           
           if (self.fill_background | self.fill_center | self.fill_box):
             Radditional, phiadditional, zadditional = np.empty([0]),np.empty([0]),np.empty([0])
+            print "Adding background mesh..."
 
           self.zmax = np.abs(z).max()
           zmax  = np.abs(z).max()
@@ -688,7 +693,7 @@ class disk_mesh3d():
                 cellmass = mvals[-1]/self.Ncells
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
                 Rmin = np.asscalar(m2r(cellmass))
-                print type(Rmin)
+
                 sigma_in = disk.sigma_disk.evaluate(Rmin)
                 if (sigma_in < disk.sigma_cut): sigma_in = disk.sigma_cut
                 rho_in = sigma_in/zmax
@@ -711,7 +716,7 @@ class disk_mesh3d():
 
             
           if (self.fill_box == True):
-                print "Filling computational box of side half-length",self.BoxSize/2
+                print "Filling computational box of side half-length %f..." % (self.BoxSize/2)
                 zmax0 = zmax
                 Rmax0 = Rmax
                 Nlayers = 0

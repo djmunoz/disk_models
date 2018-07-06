@@ -11,6 +11,10 @@ def similarity_sigma(R,sigma0,gamma,Rc):
 def similarity_softened_sigma(R,sigma0,gamma,Rc,soft_length):
     return sigma0*(SplineProfile(R,soft_length) * Rc)**(gamma) * np.exp(-(R/Rc)**(2.0-gamma))
 
+def similarity_hole_sigma(R,sigma0,gamma,Rc,R_hole):
+    return sigma0*(SplineDerivative(R,R_hole) * R  * R * Rc)**(gamma) * np.exp(-(R/Rc)**(2.0-gamma))
+
+
 def powerlaw_cavity_sigma(R,sigma0,p,xi,R_cav):
     return sigma0 * (R_cav/R)**p * np.exp(-(R_cav/R)**xi) 
 
@@ -132,6 +136,30 @@ class similarity_softened_disk(object):
 
     def evaluate(self,R):
         return np.maximum(self.floor,similarity_softened_sigma(R,self.sigma0,self.gamma,self.Rc,self.sigma_soft))
+
+
+class similarity_hole_disk(object):
+    def __init__(self, *args, **kwargs):
+        self.sigma0 = kwargs.get("sigma0")
+        self.gamma = kwargs.get("gamma")
+        self.Rc = kwargs.get("Rc")
+        self.floor = kwargs.get("floor")
+        self.R_hole = kwargs.get("R_hole")
+        
+        #set default values
+        if (self.sigma0 is None):
+            self.sigma0 = 1.0
+        if (self.gamma is None):
+            self.gamma = 1.0
+        if (self.Rc is None):
+            self.Rc = 1.0
+        if (self.floor is None):
+            self.floor = 0.0
+        if (self.R_hole is None):
+            self.R_hole = 1e-5
+
+    def evaluate(self,R):
+        return np.maximum(self.floor,similarity_hole_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_hole))
     
 class powerlaw_cavity_disk(object):
     def __init__(self, *args, **kwargs):

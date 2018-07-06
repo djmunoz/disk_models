@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from disk_hdf5 import snapHDF5 as ws
+import itertools, sys
 
 from scipy.integrate import quad
 from scipy.integrate import cumtrapz
@@ -64,7 +65,6 @@ class snapshot():
             dims = 2
         self.load(R,phi,z,dens,None,vphi,vr,press,ids,dims=dims,adiabatic_gamma=disk.adiabatic_gamma)
 
-        print "Minimum density!", dens.min()
         
         # Check if there is a central particle
         if (disk.central_particle):
@@ -508,17 +508,9 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     #weights = np.exp(np.linspace(-1., 0., window_length))
     #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
     dens0_profile =  interp1d(radii,midplane_dens,kind='linear',fill_value='extrapolate')
-    print "Minimum density!", dens.min(),dens_cut
     
     #evaluate other quantities
     Nvals = 1200 # this number being large can be critical when steep pressure gradients are present
-    print R.shape,dens.shape,dens.min()
-    #plt.plot(R,dens,'b.')
-    plt.plot(radii,midplane_dens,'b.')
-    plt.plot(radii,disk.sigma_disk.evaluate(radii),color='r')
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.show()
 
     if (disk_mesh.NR is not None):
         Nvals = disk_mesh.NR        
@@ -529,7 +521,16 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         scale = 'log'
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
 
+    try_count = 0
+    Nvals = 1200
+
+    spinner = itertools.cycle(['-', '/', '|', '\\'])
+
     while (True):
+        sys.stdout.write(spinner.next()) 
+        sys.stdout.flush()               
+        sys.stdout.write('\b')    
+        
         radii, angular_frequency_sq = disk.evaluate_angular_freq_gravity(R1,R2,Nvals=Nvals,
                                                                          scale=scale)
 
@@ -548,8 +549,11 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         if (Nvals < 100):
             print "Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again"
             exit()
-                    
-    print "Minimum density!", dens.min(),dens_cut
+        try_count+=1
+
+        if (try_count > 30):
+            print "We are stuck trying to fix a rotation curve that can turn negative due to steep pressure gradients. Try new profile or more cells."
+        
     angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
             
     #update mesh radial limits
@@ -573,7 +577,6 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     def soundspeed(R): return disk.csnd0 * (R/disk.csndR0)**(-disk.l*0.5)
     press_cut = dens_cut * soundspeed(disk_mesh.Rout)**2
     press[ind_out] = press_cut
-    print "Minimum density!", dens.min(),dens_cut
         
     ind = R < disk_mesh.Rin 
     vphi[ind] = vphi[ind]*np.exp(-(disk_mesh.Rin-R[ind])**2/R[ind]**2)
@@ -587,7 +590,8 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     
     vr = np.zeros(R.shape)
     ids = np.arange(1,R.shape[0]+1,1)
+
+    print "Done."
     
-    print "Minimum density!", dens.min(),dens_cut
     return R,phi,z,dens,vphi,vr,press,ids
 
