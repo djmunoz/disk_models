@@ -553,7 +553,8 @@ def assign_primitive_variables_3d(disk,disk_mesh):
 
         if (try_count > 30):
             print "We are stuck trying to fix a rotation curve that can turn negative due to steep pressure gradients. Try new profile or more cells."
-        
+
+            
     angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
             
     #update mesh radial limits

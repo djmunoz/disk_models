@@ -350,7 +350,7 @@ class disk3d(object):
 
     return zvals,zrho,VertProfileNorm
 
-  def evaluate_vertical_structure_no_selfgravity(self,R,zin,zout,Nzvals=400):
+  def evaluate_vertical_structure_no_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
     if (zin > 0):
       zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
     else:
@@ -358,11 +358,11 @@ class disk3d(object):
         
       #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
       #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
-      zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-      VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
-      #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-      zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
-      return zvals,zrho,VertProfileNorm
+    zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+    VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+    #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
+    zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
+    return zvals,zrho,VertProfileNorm
 
   def evaluate_vertical_structure(self,R,zin,zout,Nzvals=400):
     if (self.self_gravity):
@@ -660,7 +660,8 @@ class disk_mesh3d():
           zmax  = np.abs(z).max()
           Rmin  = R.min()
           Rmax  = R.max()
-            
+
+
           if (self.fill_background == True):
                 Rback,phiback = self.mc_sample_2d(disk,Npoints=0.1 * self.Ncells)
                 zback = self.mc_sample_vertical_background(R,Rback,z,disk)
@@ -764,6 +765,7 @@ class disk_mesh3d():
                 R = np.append(R,Radditional)
                 phi = np.append(phi,phiadditional)
                 z = np.append(z,zadditional)
+
 
           print "Added a total of %i extra points\n" % Radditional.shape[0]
           return R,phi,z
