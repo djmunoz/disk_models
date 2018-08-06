@@ -10,25 +10,27 @@ if __name__=="__main__":
     
     #DISK MODEL
     
-    d = dm.disk3d()
-
-    
+    d = dm.disk3d(sigma_type='similarity_cavity')
+    print dir(d)
+    print d.csnd0
+    print d.sigma_type
 
     # DISK MESH
     mesh = dm.disk_mesh3d(mesh_type="spherical",mesh_alignment="interleaved",
-                          Rin=0.5,Rout=2.5,
-                          NR=100,Nphi=160,Nlat=80,latmax = 30.0*np.pi/180,
-                          fill_center=False,fill_box=True,BoxSize=160,
+                          Rin=0.5,Rout=5.0,
+                          NR=300,Nphi=160,Nlat=80,latmax = 10.0*np.pi/180,
+                          fill_center=False,fill_box=True,fill_background=True,
+                          BoxSize=15,
                           N_inner_boundary_rings=0,
                           N_outer_boundary_rings=3)
 
     # Create SNAPSHOT
     s = dm.snapshot()
-    s.create(d,mesh,empty=True)
+    s.create(d,mesh,empty=False)
     #s.incline(37,0,mesh)
 
-
-    plt.plot(s.gas.pos[:,0],s.gas.pos[:,1],'b.',ms=2.0)
+    print s.gas.pos.shape
+    plt.plot(s.gas.pos[:,0],s.gas.pos[:,2],'b.',ms=2.0)
     plt.show()
     
     # Write files

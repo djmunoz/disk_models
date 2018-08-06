@@ -499,11 +499,17 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
     #obtain density of cells
     dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
-    dens_cut = max(midplane_dens[-1],midplane_dens[midplane_dens > 0].min())
+    plt.plot(radii,midplane_dens)
+    dens_cut = max(midplane_dens[-1],midplane_dens[midplane_dens > 0].min())/100
+    plt.plot(radii,np.repeat(dens_cut,radii.shape[0]))
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.show()
     radii = np.append(radii,R2)
     midplane_dens = np.append(midplane_dens,dens_cut)
     dens[dens < dens_cut] = dens_cut
     midplane_dens[midplane_dens < dens_cut] = dens_cut
+    print "Density cutoff is:", dens_cut
     #window_length = 20
     #weights = np.exp(np.linspace(-1., 0., window_length))
     #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
@@ -566,15 +572,15 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     soundspeedsq_gradient_profile = interp1d(radii,soundspeed_sq_gradient,kind='linear')
 
     # primitive variables inside the disk
-    ind_in = (R > disk_mesh.Rin) & (R < disk_mesh.Rout) & (np.abs(z) < disk_mesh.zmax) 
+    ind_in = (R > disk_mesh.Rin) & (R < disk_mesh.Rout) & (np.abs(z) < 1.5 * disk_mesh.zmax) 
     vphi, press = np.zeros(R.shape),np.zeros(R.shape)
     vphi[ind_in] = vphi_profile(R[ind_in]) -  soundspeedsq_gradient_profile(R[ind_in]) * np.log(dens[ind_in]/dens0_profile(R[ind_in]))
     press[ind_in] = dens[ind_in] * soundspeedsq_profile(R[ind_in])
 
     # behavior outside the disk
-    ind_out = (R >= disk_mesh.Rout) | (np.abs(z) >= disk_mesh.zmax) | (R <= disk_mesh.Rin) 
+    ind_out = (R >= disk_mesh.Rout) | (np.abs(z) >= 1.5 * disk_mesh.zmax) | (R <= disk_mesh.Rin) 
     vphi[ind_out] = 0
-    dens[ind_out] = dens_cut/1000000
+    dens[ind_out] = dens_cut/10000000
     def soundspeed(R): return disk.csnd0 * (R/disk.csndR0)**(-disk.l*0.5)
     press_cut = dens_cut * soundspeed(disk_mesh.Rout)**2
     press[ind_out] = press_cut
@@ -592,6 +598,15 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     vr = np.zeros(R.shape)
     ids = np.arange(1,R.shape[0]+1,1)
 
+    # Checking enclosed mass
+    radial_bins = disk.evaluate_radial_mass_bins(disk_mesh.Rin,disk_mesh.Rout,200)
+    bin_inds=np.digitize(R,radial_bins)
+    for kk in range(0,radial_bins.shape[0]):
+        if (R[bin_inds == kk].shape[0] == 0): continue
+        bin_radius = R[bin_inds == kk].mean()
+        _, zmvals = disk.evaluate_enclosed_vertical(bin_radius,0,z[bin_inds == kk].max(),Nzvals=300)
+        print 2 * zmvals[-1] / disk.sigma_disk.evaluate(bin_radius)
+    
     print "Done."
     
     return R,phi,z,dens,vphi,vr,press,ids

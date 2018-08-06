@@ -60,6 +60,7 @@ class disk3d(object):
     # other properties
     self.self_gravity = kwargs.get("self_gravity")
     self.central_particle = kwargs.get("central_particle")
+    self.sigma_soft = kwargs.get("sigma_soft")
     
     #set defaults
     if (self.G is None):
@@ -435,6 +436,8 @@ class disk3d(object):
     radii = []
         
     zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
+
+
     
     print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
     print "(using %i radial bins)" % radial_bins.shape[0]
@@ -453,8 +456,9 @@ class disk3d(object):
       radii.append(bin_radius)
       dens_profile = interp1d(zvals,zrhovals,kind='linear')
       dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))
+      #_, zmvals = self.evaluate_enclosed_vertical(bin_radius,0,zsamples[bin_inds == kk].max(),Nzvals=300)
+      #print 2 * zmvals[-1] / self.sigma_disk.evaluate(bin_radius)
 
-    radii, mid_plane = np.array(radii),np.array(mid_plane)
 
     return dens,np.array(radii),np.array(mid_plane)
         
@@ -568,7 +572,7 @@ class disk_mesh3d():
               Rback,phiback,zback = self.mc_fill_background(disk,0.1 * R.shape[0])
               Radditional, phiadditional, zadditional = np.append(Radditional,Rbacl),\
                                                         np.append(phiadditional,phiback),\
-                                                        np.append(zadditional,zcback)
+                                                        np.append(zadditional,zback)
               
               zmax = max(zmax,np.abs(zadditional).max())
               Rmax = max(Rmax,np.abs(Radditional).max())
@@ -651,6 +655,7 @@ class disk_mesh3d():
       if (self.mesh_type == "mc"):
           R,phi = self.mc_sample_2d(disk)
           z = self.mc_sample_vertical(R,disk)
+
           
           if (self.fill_background | self.fill_center | self.fill_box):
             Radditional, phiadditional, zadditional = np.empty([0]),np.empty([0]),np.empty([0])
@@ -663,8 +668,9 @@ class disk_mesh3d():
 
 
           if (self.fill_background == True):
-                Rback,phiback = self.mc_sample_2d(disk,Npoints=0.1 * self.Ncells)
+                Rback,phiback = self.mc_sample_2d(disk,Npoints=0.05 * self.Ncells)
                 zback = self.mc_sample_vertical_background(R,Rback,z,disk)
+
                 Rbackmax = Rback.max()
                 print "....adding %i additional mesh-generating points" % (Rback.shape[0])
                 Radditional = np.append(Radditional,Rback).flatten()
@@ -798,6 +804,12 @@ class disk_mesh3d():
         
         #bin radial values (use mass as a guide for bin locations)
         radial_bins = disk.evaluate_radial_mass_bins(self.Rin,self.Rout,R_bins)
+        print radial_bins
+        radial_bins = np.logspace(np.log10(self.Rin),np.log10(self.Rout),R_bins)
+        plt.plot(radial_bins,SplineDerivative(radial_bins,disk.sigma_soft) * radial_bins)
+        plt.plot(radial_bins,1.0/radial_bins**2)
+        plt.show()
+        
         bin_inds=np.digitize(R,radial_bins)
         z = np.zeros(R.shape[0])
 
@@ -813,32 +825,42 @@ class disk_mesh3d():
                 continue
             
             bin_radius = R[bin_inds == kk].mean()
-            scale_height_guess = bin_radius * soundspeed(bin_radius,disk.csnd0,disk.l,disk.csndR0)/np.sqrt(disk.Mcentral/bin_radius)
-            zin,zout = 0.001 * scale_height_guess , 15 * scale_height_guess
+
+            scale_height_guess = bin_radius * soundspeed(bin_radius,disk.csnd0,disk.l,disk.csndR0)/ \
+                                 np.sqrt(disk.Mcentral * SplineProfile(bin_radius,disk.Mcentral_soft))
+            zin,zout = 0.0001 * scale_height_guess , 15 * scale_height_guess
             zvals,zmvals = disk.evaluate_enclosed_vertical(bin_radius,zin,zout,Nzvals=400)
             zbin = self.mc_sample_from_mass(zvals,zmvals,int(1.2*N_in_bin))
             zbinmax = zbin.max()
-            while (zbin[zbin < zbinmax].shape[0] > 1.04 * N_in_bin):
-                zbin = zbin[zbin< (0.99 * zbinmax)]
-                zbinmax = zbin.max()
-            if (zbin.shape[0] > N_in_bin): zbin = zbin[:N_in_bin]
 
+            '''
+            while (zbin[zbin < zbinmax].shape[0] > 1.04 * N_in_bin):
+              zbin = zbin[zbin< (0.99 * zbinmax)]
+              zbinmax = zbin.max()
+            if (zbin.shape[0] > N_in_bin): zbin = zbin[:N_in_bin]
+            '''
+            zbin1 = zbin[zbin >= (0.95 * zbinmax)]
+            #print bin_radius,N_in_bin,zbin.shape,zbinmax,zbin.min(),zbin1.shape[0],zin,zout
+            zbin2 = np.random.choice(zbin[zbin < (0.95 * zbinmax)],N_in_bin - zbin1.shape[0])
+            zbin  = np.append(zbin1,zbin2)
+            
             #points below or above the mid-plane
             zbin = zbin * (np.round(rd.random_sample(N_in_bin))*2 - 1)
             z[bin_inds == kk] = zbin
 
         return z
 
+
     def mc_sample_vertical_background(self,R,Rback,z,disk):
 
-        zmax = 1.3*np.abs(z).max()
+        zmaxglob = 1.3*np.abs(z).max()
         zback = np.zeros(Rback.shape[0])
     
-        if (self.Ncells < 50000): R_bins = 40
-        elif (self.Ncells < 100000): R_bins = 60
-        elif (self.Ncells < 200000): R_bins = 100
-        elif (self.Ncells < 600000): R_bins   = 200
-        else: R_bins = 250
+        if (self.Ncells < 50000): R_bins = 80
+        elif (self.Ncells < 100000): R_bins = 120
+        elif (self.Ncells < 200000): R_bins = 200
+        elif (self.Ncells < 600000): R_bins   = 400
+        else: R_bins = 500
         
         #bin radial values (use mass as a guide for bin locations)
         radial_bins = disk.evaluate_radial_mass_bins(self.Rin,self.Rout,R_bins)
@@ -852,9 +874,9 @@ class disk_mesh3d():
             
             zbinmax = z[bin_inds == kk].max()
             bin_radius = Rback[backbin_inds == kk].mean()
-
-            scale_height_guess = bin_radius * soundspeed(bin_radius,disk.csnd0,disk.l,disk.csndR0)/np.sqrt(disk.Mcentral/bin_radius)
-            zbackbin = rd.random_sample(Nback_in_bin)*(zmax - zbinmax) + zbinmax
+            
+            _, zmvals = disk.evaluate_enclosed_vertical(bin_radius,0,zbinmax,Nzvals=300)
+            zbackbin = rd.random_sample(Nback_in_bin)*(zmaxglob - zbinmax) + zbinmax
             zback[backbin_inds == kk] = zbackbin * (np.round(rd.random_sample(Nback_in_bin))*2 - 1)
 
         return zback
