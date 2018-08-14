@@ -309,10 +309,18 @@ class snapshot():
         self.gas.pos[:,1]+= 0.5 * self.BoxSize
         self.gas.pos[:,2]+= 0.5 * self.BoxSize
 
+        # Make sure there are no mesh-generating points outside the box after rotation
+        ind = (self.gas.pos[:,0] > 0) & (self.gas.pos[:,0] < self.BoxSize) &\
+              (self.gas.pos[:,1] > 0) & (self.gas.pos[:,1] < self.BoxSize) &\
+              (self.gas.pos[:,2] > 0) & (self.gas.pos[:,2] < self.BoxSize) 
+        self.extract(ind)
+        
+        
     def extract(self,index):
         self.gas.pos=self.gas.pos[index,:]
         self.gas.vel=self.gas.vel[index,:]
         self.gas.dens=self.gas.dens[index]
+        self.gas.press=self.gas.press[index]
         if (self.gas.utherm is not None):
             self.gas.utherm=self.gas.utherm[index]
         if (self.gas.mass is not None):
@@ -499,12 +507,8 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
     #obtain density of cells
     dens, radii, midplane_dens = disk.solve_vertical_structure(R,z,R1,R2,disk_mesh.Ncells)
-    plt.plot(radii,midplane_dens)
     dens_cut = max(midplane_dens[-1],midplane_dens[midplane_dens > 0].min())/100
-    plt.plot(radii,np.repeat(dens_cut,radii.shape[0]))
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.show()
+
     radii = np.append(radii,R2)
     midplane_dens = np.append(midplane_dens,dens_cut)
     dens[dens < dens_cut] = dens_cut
@@ -605,7 +609,6 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         if (R[bin_inds == kk].shape[0] == 0): continue
         bin_radius = R[bin_inds == kk].mean()
         _, zmvals = disk.evaluate_enclosed_vertical(bin_radius,0,z[bin_inds == kk].max(),Nzvals=300)
-        print 2 * zmvals[-1] / disk.sigma_disk.evaluate(bin_radius)
     
     print "Done."
     

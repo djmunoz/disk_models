@@ -803,12 +803,9 @@ class disk_mesh3d():
         else: R_bins = 500
         
         #bin radial values (use mass as a guide for bin locations)
-        radial_bins = disk.evaluate_radial_mass_bins(self.Rin,self.Rout,R_bins)
-        print radial_bins
+        #radial_bins = disk.evaluate_radial_mass_bins(self.Rin,self.Rout,R_bins)
         radial_bins = np.logspace(np.log10(self.Rin),np.log10(self.Rout),R_bins)
-        plt.plot(radial_bins,SplineDerivative(radial_bins,disk.sigma_soft) * radial_bins)
-        plt.plot(radial_bins,1.0/radial_bins**2)
-        plt.show()
+
         
         bin_inds=np.digitize(R,radial_bins)
         z = np.zeros(R.shape[0])
