@@ -12,9 +12,11 @@ in 2D.
 
 
 Mdot_out = 1.0
-R_out = 140 #70.0
-NR = 700 #600
-BOX = 300.0
+R_out = 100 #70.0
+Rbreak = 70
+NR = 600 #600
+Nphi= 400
+BOX = 220.0
 
 def sigma_function(R,Rcav,sigma0,p,xi,zeta):
     return sigma0 * (1.0/R)**p * np.exp(-(R_cav/R)**xi + (R_cav/R)**zeta) * (1 - l0 * np.sqrt(1.0/R))
@@ -88,15 +90,23 @@ if __name__=="__main__":
                   quadrupole_correction = quadrupole_correction)
 
     # DISK MESH
-    mesh = dm.disk_mesh2d(mesh_type="polar",Rin= Rin,Rout=Rout,
+    NR1 = NR
+    NR2 = int((np.log10(Rout)-np.log10(Rbreak))/
+               (np.log10(Rbreak)-np.log10(Rin)) * NR / 1.5)
+    print NR1,NR2
+    Nphi1 = Nphi
+    Nphi2 = int(Nphi/1.5)
+
+    mesh = dm.disk_mesh2d(mesh_type="polar",Rin= Rin,Rout=Rout, Rbreak = Rbreak,
                           mesh_alignment = "interleaved",
-                          NR=NR,Nphi=400,
-                          #Nphi_inner_bound = 600,
+                          NR1=NR1,Nphi1=Nphi1,
+                          NR2=NR2,Nphi2=Nphi2,
+                          Nphi_outer_bound = Nphi2,
                           fill_center=False,fill_box=True,BoxSize=BOX,
                           N_inner_boundary_rings=2,
                           N_outer_boundary_rings=1) 
 
-    
+
     
     # Create SNAPSHOT
     s = dm.snapshot()
@@ -158,6 +168,7 @@ if __name__=="__main__":
     plt.show()
     exit()
     '''
+    print s.gas.ids[(rad < Rout) & (rad > Rbreak)]
     
 
     ind = s.gas.ids < -2

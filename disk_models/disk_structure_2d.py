@@ -313,8 +313,13 @@ class disk_mesh2d(object):
         self.mesh_type=kwargs.get("mesh_type")
         self.Rin = kwargs.get("Rin")
         self.Rout = kwargs.get("Rout")
+        self.Rbreak = kwargs.get("Rbreak")
         self.NR = kwargs.get("NR")
         self.Nphi = kwargs.get("Nphi")
+        self.NR1 = kwargs.get("NR1")
+        self.Nphi1 = kwargs.get("Nphi1")
+        self.NR2 = kwargs.get("NR2")
+        self.Nphi2 = kwargs.get("Nphi2")
         self.Nphi_inner_bound = kwargs.get("Nphi_inner_bound")
         self.Nphi_outer_bound = kwargs.get("Nphi_outer_bound")
         self.BoxSize = kwargs.get("BoxSize")
@@ -362,43 +367,68 @@ class disk_mesh2d(object):
         
         if (self.mesh_type == "polar"):
 
-            rvals = np.logspace(np.log10(self.Rin),np.log10(self.Rout),self.NR+1)
-            rvals = rvals[:-1] + 0.5 * np.diff(rvals)
-            self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
-            # Add cells outside the inner boundary
-            for kk in range(self.N_inner_boundary_rings): rvals=np.append(rvals[0]-self.deltaRin, rvals)
-            # Add cells outside the outer boundary
-            for kk in range(self.N_outer_boundary_rings): rvals=np.append(rvals,rvals[-1]+self.deltaRout)
+            if (self.Rbreak is None) & (self.NR1 is None) & (self.Nphi1 is None) \
+               & (self.NR2 is None) & (self.Nphi2 is None):
+                
+                rvals = np.logspace(np.log10(self.Rin),np.log10(self.Rout),self.NR+1)
+                rvals = rvals[:-1] + 0.5 * np.diff(rvals)
+                self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
+                # Add cells outside the inner boundary
+                for kk in range(self.N_inner_boundary_rings): rvals=np.append(rvals[0]-self.deltaRin, rvals)
+                # Add cells outside the outer boundary
+                for kk in range(self.N_outer_boundary_rings): rvals=np.append(rvals,rvals[-1]+self.deltaRout)
+                
+                phivals = np.linspace(0,2*np.pi,self.Nphi+1)
+                R,phi = np.meshgrid(rvals,phivals)
+                
+                if (self.mesh_alignment == "interleaved"):
+                    phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] = phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] + 0.5*np.diff(phi[:,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2],axis=0)
+                    
+                phi = phi[:-1,:]
+                R = R[:-1,:]
+                rvals = R.mean(axis=0)
+            
+                R, phi = R.flatten(),phi.flatten()
 
-            phivals = np.linspace(0,2*np.pi,self.Nphi+1)
-            R,phi = np.meshgrid(rvals,phivals)
-            
-            if (self.mesh_alignment == "interleaved"):
-                phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] = phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] + 0.5*np.diff(phi[:,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2],axis=0)
+            elif (self.Rbreak is not None) & (self.NR1 is not None) & (self.Nphi1 is not None) \
+                 & (self.NR2 is not None) & (self.Nphi2 is not None):
 
-            phi = phi[:-1,:]
-            R = R[:-1,:]
-            rvals = R.mean(axis=0)
-            
-            R, phi = R.flatten(),phi.flatten()
-            
+                rvals1 = np.logspace(np.log10(self.Rin),np.log10(self.Rbreak),self.NR1+1)
+                rvals1 = rvals1[:-1] + 0.5 * np.diff(rvals1)
+                phivals1 = np.linspace(0,2*np.pi,self.Nphi1+1)
+                R1,phi1 = np.meshgrid(rvals1,phivals1)
+                if (self.mesh_alignment == "interleaved"):
+                    phi1[:-1,::2] = phi1[:-1,::2] + 0.5 * np.diff(phi1[:,::2],axis=0)
+                
+                rvals2 = np.logspace(np.log10(self.Rbreak),np.log10(self.Rout),self.NR2+1)
+                rvals2 = rvals2[:-1] + 0.5 * np.diff(rvals2)
+                phivals2 = np.linspace(0,2*np.pi,self.Nphi2+1)
+                R2,phi2 = np.meshgrid(rvals2,phivals2)
+                if (self.mesh_alignment == "interleaved"):
+                    phi2[:-1,::2] = phi2[:-1,::2] + 0.5 * np.diff(phi2[:,::2],axis=0)
+
+                R = np.append(R1.flatten(),R2.flatten())
+                phi = np.append(phi1.flatten(),phi2.flatten())
+                plt.plot(R,phi,'k.')
+                plt.axis([self.Rin,self.Rout,0,2*np.pi])
+                plt.show()
+                self.deltaRin = np.sort(np.unique(R))[1] - np.sort(np.unique(R))[0]
+                self.deltaRout = np.sort(np.unique(R))[-1] - np.sort(np.unique(R))[-2]
+                
             if (self.Nphi_inner_bound != self.Nphi):
                 rvals_add = rvals[rvals <= rvals[2 * self.N_inner_boundary_rings - 1]]
                 rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_inner_boundary_rings)
-                print rvals_add
                 ind = R[:] > np.round(rvals[1],4)
-                print R.min()
                 R, phi = R[ind], phi[ind]
-                print R.min()
-                print self.Nphi_inner_bound,rvals_add
                 R_add, phi_add = np.meshgrid(rvals_add, np.linspace(0, 2*np.pi, self.Nphi_inner_bound + 1))
                 R = np.append(R,R_add[:-1,:].flatten())
                 phi = np.append(phi,phi_add[:-1,:].flatten())
                                 
             if (self.Nphi_outer_bound != self.Nphi):
-                rvals_add = rvals[rvals >= rvals[-2 * self.N_outer_boundary_rings]]
+                rvals_add = np.sort(np.unique(R))[-2 * self.N_outer_boundary_rings:]
+                #rvals[rvals >= rvals[-2 * self.N_outer_boundary_rings]]
                 rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_outer_boundary_rings)
-                ind = R[:] < rvals[-2 * self.N_outer_boundary_rings]
+                ind = R[:] < rvals_add.min()#-2 * self.N_outer_boundary_rings]
                 R, phi = R[ind], phi[ind]
                 R_add, phi_add = np.meshgrid(rvals_add, np.linspace(0, 2*np.pi, self.Nphi_outer_bound + 1))
                 R = np.append(R,R_add.flatten())
@@ -449,7 +479,9 @@ class disk_mesh2d(object):
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
 
-            print R,phi
+            plt.plot(R,phi,'k.')
+            plt.axis([self.Rin,self.Rout,0,2*np.pi])
+            plt.show()
             return R,phi
 
 '''
