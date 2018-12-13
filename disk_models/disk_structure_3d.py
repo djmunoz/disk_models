@@ -118,7 +118,7 @@ class disk3d(object):
           
                 
     if (self.sigma_cut is None):
-      self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
+      self.sigma_cut = self.sigma_disk.sigma0 * 1e-8
       
     if (self.self_gravity is None):
       self.self_gravity = False
@@ -696,15 +696,22 @@ class disk_mesh3d():
 
             
           if (self.fill_center == True):
-                rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=100)
+                rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=200)
                 cellmass = mvals[-1]/self.Ncells
+                #print mvals,rvals
+                #index = np.where(mvals > cellmass)
+                #print index,cellmass
+                #first_cell = rvals[index][0]
+                #print 'first cell is at',first_cell
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
                 Rmin = np.asscalar(m2r(cellmass))
 
                 sigma_in = disk.sigma_disk.evaluate(Rmin)
                 if (sigma_in < disk.sigma_cut): sigma_in = disk.sigma_cut
-                rho_in = sigma_in/zmax
-                delta = 0.15*(cellmass/rho_in)**0.333333
+                h = Rmin * soundspeed(Rmin,disk.csnd0,disk.l,disk.csndR0)/ \
+                    np.sqrt(disk.Mcentral * SplineProfile(Rmin,disk.Mcentral_soft))
+                rho_in = sigma_in/h
+                delta = (cellmass/rho_in)**0.333333
                 Lx, Ly, Lz = 2 * Rmin, 2 * Rmin,2*zmax
                 xcenter,ycenter,zcenter =  self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 Rcenter = np.sqrt(xcenter**2+ycenter**2)
@@ -712,7 +719,7 @@ class disk_mesh3d():
                 ind = Rcenter < Rmin 
                 Rcenter, phicenter,zcenter = Rcenter[ind], phicenter[ind],zcenter[ind]
 
-                print "....adding %i additional mesh-generating points" % (Rcenter.shape[0])
+                print "....adding hehehe %i additional mesh-generating points" % (Rcenter.shape[0])
                 Radditional = np.append(Radditional,Rcenter)
                 phiadditional = np.append(phiadditional,phicenter)
                 zadditional = np.append(zadditional,zcenter)

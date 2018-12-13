@@ -1,5 +1,5 @@
 import numpy as np
-
+from disk_spline_kernels import *
 
 
 def powerlaw_sigma(R,sigma0,p,R0):
@@ -12,14 +12,18 @@ def similarity_softened_sigma(R,sigma0,gamma,Rc,soft_length):
     return sigma0*(SplineProfile(R,soft_length) * Rc)**(gamma) * np.exp(-(R/Rc)**(2.0-gamma))
 
 def similarity_hole_sigma(R,sigma0,gamma,Rc,R_hole):
-    return sigma0*(SplineDerivative(R,R_hole) * R  * R)**(gamma) * Rc**(gamma) * np.exp(-(R/Rc)**(2.0-gamma))
+    return sigma0*(g3(R,R_hole) * R**6)**(gamma) * Rc**(gamma) * np.exp(-(R/Rc)**(2.0-gamma))
 
 
 def powerlaw_cavity_sigma(R,sigma0,p,xi,R_cav):
     return sigma0 * (R_cav/R)**p * np.exp(-(R_cav/R)**xi) 
 
 def similarity_cavity_sigma(R,sigma0,gamma,Rc,xi,R_cav):
-    return sigma0*(R/Rc)**(-gamma) * np.exp(-(R/Rc)**(2.0-gamma)) * np.exp(-(R_cav/R)**xi) 
+    exp1 = (R_cav/R)**xi
+    exp2 = (R_cav/R)**2
+    exp = -exp1#+exp2
+    return sigma0*(R/Rc)**(-gamma) * np.exp(-(R/Rc)**(2.0-gamma)) * np.exp(exp)
+                                                                           
 
 
 def SplineProfile(R,h):
