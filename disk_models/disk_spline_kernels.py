@@ -1,5 +1,150 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
+# 3D Kernel coefficients
+KERNEL_COEFF_1 = 2.546479089470   # (8/PI)
+KERNEL_COEFF_2 = 15.278874536822  # (48/PI)
+KERNEL_COEFF_3 = 45.836623610466  # (3*48/PI) 
+KERNEL_COEFF_4 = 30.557749073644  # (2*48/PI)
+KERNEL_COEFF_5 = 5.092958178941   # (16/PI)
+KERNEL_COEFF_6 = -15.278874536822 # (-48/PI)
+NORM_COEFF =  4.188790204786 # (4/3*PI)
+
+
+def W(R,h):
+   
+    h_inv = 1.0 / h
+    h3_inv = h_inv**3
+    u = R * h_inv
+    wk = u * 0
+    
+    if (isinstance(R,(list, tuple, np.ndarray))):
+        ind1 = u < 0.5
+        ind2 = (u >= 0.5) & (u < 1.0)
+        ind3 = u >= 1.0
+        wk[ind1] = h3_inv * (KERNEL_COEFF_1 + KERNEL_COEFF_2 * u[ind1]**2 *(u[ind1] - 1))
+        wk[ind2] = h3_inv * KERNEL_COEFF_5 * (1 - u[ind2] )**3
+        wk[ind3] = 0
+    else:
+        if(R < h):
+            if(u < 0.5):
+                wk = h3_inv * (KERNEL_COEFF_1 + KERNEL_COEFF_2 * u**2 *(u - 1))
+            elif (u < 1.0):
+                wk = h3_inv * KERNEL_COEFF_5 * (1 - u)**3
+        else:
+            wk = 0
+                
+    return wk
+
+
+def Wprime(R,h):
+   
+    h_inv = 1.0 / h
+    h4_inv = h_inv**4
+    u = R * h_inv
+    dwk = u * 0
+    
+    if (isinstance(R,(list, tuple, np.ndarray))):
+        ind1 = u < 0.5
+        ind2 = (u >= 0.5) & (u < 1.0)
+        ind3 = u >= 1.0
+        dwk[ind1] = h4_inv * u[ind1] * (KERNEL_COEFF_3 * u[ind1] - KERNEL_COEFF_4) 
+        dwk[ind2] = h4_inv * KERNEL_COEFF_6 * (1 - u[ind2])**2
+        dwk[ind3] = 0
+    else:
+        if(R < h):
+            if(u < 0.5):
+                dwk = h4_inv * u * (KERNEL_COEFF_3 * u - KERNEL_COEFF_4)  
+            elif (u < 1.0):
+                dwk = h4_inv * KERNEL_COEFF_6 * (1 - u)**2
+        else:
+            dwk = 0
+                
+    return dwk 
+
+def g(R,h):
+
+    h_inv = 1.0 / h
+    u = R * h_inv
+    fac = u * 0
+    
+    if (isinstance(R,(list, tuple, np.ndarray))):
+        ind1 = u < 0.5
+        ind2 = (u >= 0.5) & (u < 1.0)
+        ind3 = u >= 1.0
+        fac[ind1] = h_inv * (-14.0 / 5 + u[ind1] **2 * (16.0/ 3 + u[ind1] **2*(-48.0 /5  + 32.0/5 * u[ind1] )))
+        fac[ind2] = h_inv * (1.0/15.0 / u[ind2]  - 16.0 /5 + \
+                             u[ind2] **2 *(32.0 /3 + u[ind2]  * \
+                                           (-16 + 48.0/5 * u[ind2]  - 32.0/15 * u[ind2]**2)))
+        fac[ind3] = -h_inv / u[ind3]
+    else:
+        if(R < h):
+            if(u < 0.5):
+                fac = h_inv * (-14.0 / 5 + u**2 * (16.0/ 3 + u**2*(-48.0 /5  + 32.0/5 * u)))
+            elif (u < 1.0):
+                fac = h_inv * (1.0/15.0 / u - 16.0 /5 + \
+                               u**2 *(32.0 /3 + u * (-16 + 48.0/5 * u - 32.0/15 * u**2)))
+        else:
+            fac = -h_inv / u
+                
+                
+    return -fac
+
+def g1(R,h):
+
+    h_inv = 1.0 / h
+    h3_inv = h_inv**3
+    u = R * h_inv
+    fac = u * 0
+    
+    if (isinstance(R,(list, tuple, np.ndarray))):
+        ind1 = u < 0.5
+        ind2 = (u >= 0.5) & (u < 1.0)
+        ind3 = u >= 1.0
+        fac[ind1] = h3_inv * (-32.0 / 3 + u[ind1]**2 * (192.0/ 5 - 32 * u[ind1]))
+        fac[ind2] = h3_inv * (1.0/15.0 / u[ind2]**3 - 64.0 / 3 + 48 * u[ind2] \
+                               -192.0 /5 * u[ind2]**2 + 32.0 /3 * u[ind2]**3)
+        fac[ind3] = -h3_inv / u[ind3]**3
+    else:
+        if(R < h):
+            if(u < 0.5):
+                fac = h3_inv * (-32.0 / 3 + u**2 * (192.0/ 5 - 32 * u))
+            elif (u < 1.0):
+                fac = h3_inv * (1.0/15.0 / u**3 - 64.0 / 3 + 48 * u
+                                -192.0 /5 * u**2 + 32.0 /3 * u**3)
+        else:
+            fac = -h3_inv / u**3
+                
+                
+    return -fac
+
+
+
+def g2(R,h):
+
+    h_inv = 1.0 / h
+    h5_inv = h_inv**5
+    u = R * h_inv
+    fac = u * 0
+    
+    if (isinstance(R,(list, tuple, np.ndarray))):
+        ind1 = u < 0.5
+        ind2 = (u >= 0.5) & (u < 1.0)
+        ind3 = u >= 1.0
+        fac[ind1] = h5_inv * (384.0/5 - 96 * u[ind1])
+        fac[ind2] = h5_inv * (-384.0/5 - 0.2 /u[ind2] **5 + 48.0 / u[ind2]  + 32.0  *u[ind2] )
+        fac[ind3] = h5_inv * 3 / u[ind3]**5
+    else:
+        if(R < h):
+            if(u < 0.5):
+                fac = h5_inv * (384.0/5 - 96 * u)
+            elif (u < 1.0):
+                fac = h5_inv * (-384.0/5 - 0.2 /u**5 + 48.0 / u + 32.0 * u)
+        else:
+            fac = h5_inv * 3 / u**5
+                
+                
+    return fac / 3
 
 def g3(R,h):
 
@@ -56,3 +201,19 @@ def g4(R,h):
     return fac/3
 
     
+if __name__ == '__main__':
+
+    r = np.linspace(0.001,2.0,100)
+    plt.plot(r,1.0/r,'k--')
+    plt.plot(r,g(r,1.0))
+    plt.plot(r,-np.gradient(g(r,1.0))/np.gradient(r),'k:')
+    plt.plot(r,r*g1(r,1.0))
+    plt.plot(r,r*g2(r,1.0))
+    #plt.plot(r,g3(r,1.0))
+    #plt.plot(r,g4(r,1.0))
+    plt.ylim(0,7)
+    plt.show()
+
+    plt.plot(r,W(r,1.0))
+    plt.plot(r,-Wprime(r,1.0))
+    plt.show()

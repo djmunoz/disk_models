@@ -8,6 +8,8 @@ from scipy.integrate import cumtrapz
 import scipy.integrate as integ
 try:
   from scipy.spatial import Voronoi
+  VORONOI = True
+  LLOYD_STEPS = 4
 except ImportError:
   None
 
@@ -23,7 +25,8 @@ rd.seed(42)
 
 
 def soundspeed(R,csnd0,l,R0,soft=1e-5):
-    return csnd0 * (SplineProfile(R,soft) * R0)**(0.5 * l)
+  #return csnd0 * (SplineProfile(R,soft) * R0)**(0.5 * l)
+  return csnd0 * (R0/np.sqrt(R**2 + soft**2))**(0.5 * l)
 
 
 class disk3d(object):
@@ -169,7 +172,7 @@ class disk3d(object):
 
   def evaluate_angular_freq_central_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
-    Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2)
+    Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft*2.8) * (1 + 3 * self.quadrupole_correction/rvals**2)
     return rvals, Omega_sq
 
   def evaluate_angular_freq_external_gravity(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
@@ -249,7 +252,7 @@ class disk3d(object):
 
   def evaluate_radial_velocity_viscous(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
-    Omega = np.sqrt(self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft) * (1 + 3 * self.quadrupole_correction/rvals**2))
+    Omega = np.sqrt(self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft*2.8) * (1 + 3 * self.quadrupole_correction/rvals**2))
     sigma = (self.evaluate_sigma(Rin,Rout,Nvals,scale,radii_list)[1])
     _, dOmegadR = self.evaluate_radial_gradient(Omega,Rin,Rout,Nvals,scale=scale)
     
@@ -385,7 +388,7 @@ class disk3d(object):
 
   
       
-  def solve_vertical_structure(self,Rsamples,zsamples,Rin,Rout,Ncells):
+  def solve_vertical_structure(self,Rsamples,phisamples,zsamples,Rin,Rout,Ncells):
     
     """
     Routine to iteratively solve for the vertical structure of an accretion disk.
@@ -438,7 +441,6 @@ class disk3d(object):
     zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
 
 
-    
     print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
     print "(using %i radial bins)" % radial_bins.shape[0]
     for kk in range(0,radial_bins.shape[0]):
@@ -459,7 +461,17 @@ class disk3d(object):
       #_, zmvals = self.evaluate_enclosed_vertical(bin_radius,0,zsamples[bin_inds == kk].max(),Nzvals=300)
       #print 2 * zmvals[-1] / self.sigma_disk.evaluate(bin_radius)
 
-
+    '''
+    if VORONOI:
+      # The center of the disk is always tricky. So we try to regularize the mesh
+      # using Lloyd steps
+      xsamples, ysamples = Rsamples * np.cos(phi_samples),Rsamples * np.sin(phi_samples)
+      inner_disk = Rsamples <  5 * Rin 
+      for step in range(LLOYD_STEPS):
+        print "Lloyd step #%i" % step
+        vor = Voronoi(zip(xsamples[inner_disk],ysample[inner_disk],zsamples[inner_disk]))
+    '''
+      
     return dens,np.array(radii),np.array(mid_plane)
         
     
@@ -709,7 +721,7 @@ class disk_mesh3d():
                 sigma_in = disk.sigma_disk.evaluate(Rmin)
                 if (sigma_in < disk.sigma_cut): sigma_in = disk.sigma_cut
                 h = Rmin * soundspeed(Rmin,disk.csnd0,disk.l,disk.csndR0)/ \
-                    np.sqrt(disk.Mcentral * SplineProfile(Rmin,disk.Mcentral_soft))
+                    np.sqrt(disk.Mcentral * SplineProfile(Rmin,disk.Mcentral_soft*2.8))
                 rho_in = sigma_in/h
                 delta = (cellmass/rho_in)**0.333333
                 Lx, Ly, Lz = 2 * Rmin, 2 * Rmin,2*zmax
@@ -719,7 +731,7 @@ class disk_mesh3d():
                 ind = Rcenter < Rmin 
                 Rcenter, phicenter,zcenter = Rcenter[ind], phicenter[ind],zcenter[ind]
 
-                print "....adding hehehe %i additional mesh-generating points" % (Rcenter.shape[0])
+                print "....adding %i additional mesh-generating points" % (Rcenter.shape[0])
                 Radditional = np.append(Radditional,Rcenter)
                 phiadditional = np.append(phiadditional,phicenter)
                 zadditional = np.append(zadditional,zcenter)
@@ -831,7 +843,7 @@ class disk_mesh3d():
             bin_radius = R[bin_inds == kk].mean()
 
             scale_height_guess = bin_radius * soundspeed(bin_radius,disk.csnd0,disk.l,disk.csndR0)/ \
-                                 np.sqrt(disk.Mcentral * SplineProfile(bin_radius,disk.Mcentral_soft))
+                                 np.sqrt(disk.Mcentral * SplineProfile(bin_radius,disk.Mcentral_soft*2.8))
             zin,zout = 0.0001 * scale_height_guess , 15 * scale_height_guess
             zvals,zmvals = disk.evaluate_enclosed_vertical(bin_radius,zin,zout,Nzvals=400)
             zbin = self.mc_sample_from_mass(zvals,zmvals,int(1.2*N_in_bin))
