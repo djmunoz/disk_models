@@ -108,7 +108,12 @@ class disk3d(object):
       self.sigma_disk = similarity_hole_disk(**kwargs)
       if (self.csndR0 is None):
         self.csndR0 = self.sigma_disk.Rc
-            
+        
+    if (self.sigma_type == "similarity_zerotorque"):
+      self.sigma_disk = similarity_zerotorque_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.Rc
+        
     if (self.sigma_type == "powerlaw_cavity"):
       self.sigma_disk = powerlaw_cavity_disk(**kwargs)
       if (self.csndR0 is None):

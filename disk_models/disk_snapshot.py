@@ -508,7 +508,8 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     #obtain density of cells
     dens, radii, midplane_dens = disk.solve_vertical_structure(R,phi,z,R1,R2,disk_mesh.Ncells)
     dens_cut = max(midplane_dens[-1],midplane_dens[midplane_dens > 0].min())/100
-
+    if (midplane_dens[0] < dens_cut): dens_cut /= 100
+    
     radii = np.append(radii,R2)
     midplane_dens = np.append(midplane_dens,dens_cut)
     dens[dens < dens_cut] = dens_cut
