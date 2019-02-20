@@ -38,6 +38,7 @@ class disk3d(object):
     #define the properties of the axi-symmetric disk model
     self.sigma_type = kwargs.get("sigma_type")
     self.sigma_disk = None
+    self.sigma_function =  kwargs.get("sigma_function")
     self.sigma_cut = kwargs.get("sigma_cut")
     
     
@@ -65,11 +66,11 @@ class disk3d(object):
     self.central_particle = kwargs.get("central_particle")
     self.sigma_soft = kwargs.get("sigma_soft")
     
+    
+    
     #set defaults
     if (self.G is None):
       self.G = 1.0
-    if (self.sigma_type is None):
-      self.sigma_type="powerlaw"
     if (self.l is None):
       self.l = 1.0
     if (self.csnd0 is None):
@@ -124,7 +125,12 @@ class disk3d(object):
       if (self.csndR0 is None):
         self.csndR0 = self.sigma_disk.Rc
           
-                
+    if (self.sigma_type is None):
+      if (self.sigma_function is not None):
+        if not callable(self.sigma_function):
+          print "ERROR: No valid surface density profile provided."
+          exit()
+                    
     if (self.sigma_cut is None):
       self.sigma_cut = self.sigma_disk.sigma0 * 1e-8
       
@@ -134,17 +140,28 @@ class disk3d(object):
     if (self.central_particle is None):
       self.central_particle = False
 
-            
+      
+  def sigma_vals(self,rvals):
+        if (self.sigma_function is not None) & callable(self.sigma_function):
+            sigma = np.vectorize(self.sigma_function)(rvals)
+        else:
+            sigma = self.sigma_disk.evaluate(rvals)
+
+        return sigma
+      
   def evaluate_sigma(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
-    sigma = self.sigma_disk.evaluate(rvals)
-    sigma[sigma < self.sigma_cut] = self.sigma_cut
+    sigma = self.sigma_vals(rvals)
+    try:
+      sigma[sigma < self.sigma_cut] = self.sigma_cut
+    except TypeError:
+      None
     return rvals,sigma
       
   def evaluate_enclosed_mass(self,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
     def mass_integrand(R):
-      sigma = self.sigma_disk.evaluate(R)
+      sigma = self.sigma_vals(R)
       if (sigma < self.sigma_cut) : sigma = self.sigma_cut
       return sigma * R * 2 * np.pi
     mass = [quad(mass_integrand,0.0,R)[0] for R in rvals]
@@ -310,7 +327,7 @@ class disk3d(object):
     
   def evaluate_vertical_structure_selfgravity(self,R,zin,zout,Nzvals=400,G=1):
         
-    m_enclosed =  self.sigma_disk.evaluate(R) * np.pi * R**2
+    m_enclosed =  self.sigma_vals(R) * np.pi * R**2
 
     if (zin > 0):
       zvals = np.logspace(np.log10(zin),np.log10(zout),Nzvals)
@@ -321,9 +338,9 @@ class disk3d(object):
     # First take a guess of the vertical structure        
     if (m_enclosed < 0.1 * self.Mcentral):
       zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-      VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+      VertProfileNorm = self.sigma_vals(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
     else:
-      VertProfileNorm = self.sigma_disk.evaluate(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
+      VertProfileNorm = self.sigma_vals(R)**2/soundspeed(R,self.csnd0,self.l,self.csndR0)**2/ 2.0 * np.pi * G
         
     VertProfileNorm_old = 1.0e-40
     if (VertProfileNorm < VertProfileNorm_old): VertProfileNorm = VertProfileNorm_old
@@ -342,7 +359,7 @@ class disk3d(object):
       soln=integ.odeint(VerticalPotentialEq,[0.0,0.0],zvals,args=(R,VertProfileNorm),rtol=tol,
                         mxords=15,hmin=min_step,printmessg=False)[:,1]
       zrho0=[np.exp(-(self.vertical_potential(R,zvals[kk])+soln[kk])/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for kk in range(len(zvals))]
-      VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+      VertProfileNorm = self.sigma_vals(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
       zrho = [VertProfileNorm * r for r in zrho0]
 
       if (VertProfileNorm * 1.333 * np.pi * R**3 < 1.0e-12 * self.Mcentral): break
@@ -366,9 +383,9 @@ class disk3d(object):
       zvals = np.append(0,np.logspace(-6,np.log10(zout),Nzvals))
         
       #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
-      #VertProfileNorm =  self.sigma_disk.evaluate(R)/(2.0*quad(integrand,0,zout*15)[0])
+      #VertProfileNorm =  self.sigma_vals(R)/(2.0*quad(integrand,0,zout*15)[0])
     zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-    VertProfileNorm = self.sigma_disk.evaluate(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+    VertProfileNorm = self.sigma_vals(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
     #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
     zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
     return zvals,zrho,VertProfileNorm
@@ -464,7 +481,7 @@ class disk3d(object):
       dens_profile = interp1d(zvals,zrhovals,kind='linear')
       dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))
       #_, zmvals = self.evaluate_enclosed_vertical(bin_radius,0,zsamples[bin_inds == kk].max(),Nzvals=300)
-      #print 2 * zmvals[-1] / self.sigma_disk.evaluate(bin_radius)
+      #print 2 * zmvals[-1] / self.sigma_vals(bin_radius)
 
     '''
     if VORONOI:
@@ -723,7 +740,7 @@ class disk_mesh3d():
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
                 Rmin = np.asscalar(m2r(cellmass))
 
-                sigma_in = disk.sigma_disk.evaluate(Rmin)
+                sigma_in = disk.sigma_vals(Rmin)
                 if (sigma_in < disk.sigma_cut): sigma_in = disk.sigma_cut
                 h = Rmin * soundspeed(Rmin,disk.csnd0,disk.l,disk.csndR0)/ \
                     np.sqrt(disk.Mcentral * SplineProfile(Rmin,disk.Mcentral_soft*2.8))

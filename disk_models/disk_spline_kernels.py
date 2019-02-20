@@ -204,15 +204,25 @@ def g4(R,h):
 if __name__ == '__main__':
 
     r = np.linspace(0.001,2.0,100)
-    plt.plot(r,1.0/r,'k--')
-    plt.plot(r,g(r,1.0))
-    plt.plot(r,-np.gradient(g(r,1.0))/np.gradient(r),'k:')
-    plt.plot(r,r*g1(r,1.0))
-    plt.plot(r,r*g2(r,1.0))
-    #plt.plot(r,g3(r,1.0))
-    #plt.plot(r,g4(r,1.0))
+    plt.plot(r,1.0/r,'k--',label=r'$1/r$')
+    plt.plot(r,1.0/r/r,'k:',label=r'$1/r^2$')
+    plt.plot(r,1.5/r**2.5,'-.',color='purple',label=r'$(3/2)/r^{5/2}$')
+    plt.plot(r,1.0/r**1.5,'-.',color='orange',label=r'$1/r^{3/2}$')
+    plt.plot(r,1.0/r**0.5,'-.',color='lightblue',label=r'$1/r^{1/2}$')
+    
+    plt.plot(r,g(r,1.0),label=r'$g$')
+    #plt.plot(r,-np.gradient(g(r,1.0))/np.gradient(r),'k:')
+    plt.plot(r,r**1.5*g1(r,1.0),label=r'$rg_1$',lw=3.0,alpha=0.4)
+    plt.plot(r,-np.gradient(np.sqrt(g1(r,1.0)))/np.gradient(r),
+             color='purple',label=r"$-g_1'$",lw=3.0,alpha=0.4)
+    plt.plot(r,r**2*np.sqrt(g2(r,1.0)),label=r'$r^2g_2$')
+    plt.plot(r,r*g2(r,1.0)/np.sqrt(g1(r,1.0))/2,label=r'$d\Omega/dr$')
+    #plt.plot(r,g3(r,1.0),label=r'$g_3$')
+    #plt.plot(r,g4(r,1.0),label=r'$g_4$')
+    plt.legend()
     plt.ylim(0,7)
     plt.show()
+
 
     plt.plot(r,W(r,1.0))
     plt.plot(r,-Wprime(r,1.0))

@@ -578,7 +578,6 @@ def assign_primitive_variables_3d(disk,disk_mesh):
 
     # primitive variables inside the disk
     ind_in = (R > disk_mesh.Rin) & (R < disk_mesh.Rout) & (np.abs(z) < 1.5 * disk_mesh.zmax)
-    print "haha Rin=",disk_mesh.Rin
     vphi, press = np.zeros(R.shape),np.zeros(R.shape)
     vphi[ind_in] = np.sqrt(vphi_profile(R[ind_in])**2 -  R[ind_in] * soundspeedsq_gradient_profile(R[ind_in]) * np.log(dens[ind_in]/dens0_profile(R[ind_in])))
     press[ind_in] = dens[ind_in] * soundspeedsq_profile(R[ind_in])
