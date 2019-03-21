@@ -152,7 +152,7 @@ class similarity_hole_disk(object):
         self.gamma = kwargs.get("gamma")
         self.Rc = kwargs.get("Rc")
         self.floor = kwargs.get("floor")
-        self.sigma_soft = kwargs.get("sigma_soft")
+        self.Rhole = kwargs.get("Rhole")
         
         #set default values
         if (self.sigma0 is None):
@@ -163,11 +163,11 @@ class similarity_hole_disk(object):
             self.Rc = 1.0
         if (self.floor is None):
             self.floor = 0.0
-        if (self.sigma_soft is None):
-            self.sigma_soft = 1e-5
+        if (self.Rhole is None):
+            self.Rhole = 1e-5
 
     def evaluate(self,R):
-        return np.maximum(self.floor,similarity_hole_sigma(R,self.sigma0,self.gamma,self.Rc,self.sigma_soft))
+        return np.maximum(self.floor,similarity_hole_sigma(R,self.sigma0,self.gamma,self.Rc,self.Rhole))
 
 class similarity_zerotorque_disk(object):
     def __init__(self, *args, **kwargs):
