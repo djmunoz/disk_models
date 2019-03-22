@@ -392,30 +392,40 @@ class disk_mesh2d(object):
 
             elif (self.Rbreak is not None) & (self.NR1 is not None) & (self.Nphi1 is not None) \
                  & (self.NR2 is not None) & (self.Nphi2 is not None):
-
+                # Inner disk
                 rvals1 = np.logspace(np.log10(self.Rin),np.log10(self.Rbreak),self.NR1+1)
                 rvals1 = rvals1[:-1] + 0.5 * np.diff(rvals1)
                 phivals1 = np.linspace(0,2*np.pi,self.Nphi1+1)
-                R1,phi1 = np.meshgrid(rvals1,phivals1)
+                # Add cells outside the inner boundary
+                self.deltaRin  = rvals1[1]-rvals1[0]
+                for kk in range(self.N_inner_boundary_rings): rvals1=np.append(rvals1[0]-self.deltaRin, rvals1)
+                R1,phi1 = np.meshgrid(rvals1,phivals1)                
                 if (self.mesh_alignment == "interleaved"):
-                    phi1[:-1,::2] = phi1[:-1,::2] + 0.5 * np.diff(phi1[:,::2],axis=0)
+                    phi1[:-1,4*self.N_inner_boundary_rings::2] = phi1[:-1,4*self.N_inner_boundary_rings::2] + 0.5 * np.diff(phi1[:,4*self.N_inner_boundary_rings::2],axis=0)
+                phi1 = phi1[:-1,:]
+                R1 = R1[:-1,:]
                 
+                # Outer disk
                 rvals2 = np.logspace(np.log10(self.Rbreak),np.log10(self.Rout),self.NR2+1)
                 rvals2 = rvals2[:-1] + 0.5 * np.diff(rvals2)
                 phivals2 = np.linspace(0,2*np.pi,self.Nphi2+1)
+                # Add cells outside the outer boundary
+                self.deltaRout = rvals2[-1]-rvals2[-2]
+                for kk in range(self.N_outer_boundary_rings): rvals2=np.append(rvals2,rvals2[-1]+self.deltaRout)
                 R2,phi2 = np.meshgrid(rvals2,phivals2)
                 if (self.mesh_alignment == "interleaved"):
-                    phi2[:-1,::2] = phi2[:-1,::2] + 0.5 * np.diff(phi2[:,::2],axis=0)
+                    phi2[:-1,-2*self.N_outer_boundary_rings::2] = phi2[:-1,-2*self.N_outer_boundary_rings::2] + 0.5 * np.diff(phi2[:,-2*self.N_outer_boundary_rings::2],axis=0)
+                phi2 = phi2[:-1,:]
+                R2 = R2[:-1,:]
 
                 R = np.append(R1.flatten(),R2.flatten())
                 phi = np.append(phi1.flatten(),phi2.flatten())
-                plt.plot(R,phi,'k.')
-                plt.axis([self.Rin,self.Rout,0,2*np.pi])
-                plt.show()
+
                 self.deltaRin = np.sort(np.unique(R))[1] - np.sort(np.unique(R))[0]
                 self.deltaRout = np.sort(np.unique(R))[-1] - np.sort(np.unique(R))[-2]
                 
-            if (self.Nphi_inner_bound != self.Nphi):
+            if (self.Nphi_inner_bound != self.Nphi1):
+                rvals = np.sort(np.unique(R))
                 rvals_add = rvals[rvals <= rvals[2 * self.N_inner_boundary_rings - 1]]
                 rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_inner_boundary_rings)
                 ind = R[:] > np.round(rvals[1],4)
@@ -424,7 +434,7 @@ class disk_mesh2d(object):
                 R = np.append(R,R_add[:-1,:].flatten())
                 phi = np.append(phi,phi_add[:-1,:].flatten())
                                 
-            if (self.Nphi_outer_bound != self.Nphi):
+            if (self.Nphi_outer_bound != self.Nphi2):
                 rvals_add = np.sort(np.unique(R))[-2 * self.N_outer_boundary_rings:]
                 #rvals[rvals >= rvals[-2 * self.N_outer_boundary_rings]]
                 rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_outer_boundary_rings)
@@ -479,9 +489,6 @@ class disk_mesh2d(object):
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
 
-            plt.plot(R,phi,'k.')
-            plt.axis([self.Rin,self.Rout,0,2*np.pi])
-            plt.show()
             return R,phi
 
 '''
