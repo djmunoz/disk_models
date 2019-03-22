@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 from disk_hdf5 import snapHDF5 as ws
@@ -408,7 +409,7 @@ class snapshot():
 
 def assign_primitive_variables_2d(disk,disk_mesh):
 
-        R,phi = disk_mesh.create()
+        R,phi = disk_mesh.create(disk=disk)
         
         R1,R2 = 0.99*R.min(),1.01*R.max()
         radii, density = disk.evaluate_sigma(R1,R2)
@@ -444,7 +445,7 @@ def assign_primitive_variables_2d(disk,disk_mesh):
             ind_inner_inside = (R > disk_mesh.Rin) & (R < (disk_mesh.Rin + disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
         else:
             ind_inner_inside = np.repeat(0,R.shape[0]).astype(bool)
-        if (disk_mesh.N_outer_boundary_rings > 0):                
+        if (disk_mesh.N_outer_boundary_rings > 0):
             ind_outer_inside = (R < disk_mesh.Rout) & (R > (disk_mesh.Rout - disk_mesh.N_outer_boundary_rings * disk_mesh.deltaRout))
         else:
             ind_outer_inside = np.repeat(0,R.shape[0]).astype(bool)
@@ -495,7 +496,7 @@ def assign_primitive_variables_2d(disk,disk_mesh):
 
 def assign_primitive_variables_3d(disk,disk_mesh):
 
-    R, phi, z = disk_mesh.create(disk)
+    R, phi, z = disk_mesh.create(disk=disk)
 
 
     x = R*np.cos(phi)
@@ -514,7 +515,7 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     midplane_dens = np.append(midplane_dens,dens_cut)
     dens[dens < dens_cut] = dens_cut
     midplane_dens[midplane_dens < dens_cut] = dens_cut
-    print "Density cutoff is:", dens_cut
+    print("Density cutoff is:", dens_cut)
     #window_length = 20
     #weights = np.exp(np.linspace(-1., 0., window_length))
     #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
@@ -558,12 +559,12 @@ def assign_primitive_variables_3d(disk,disk_mesh):
             R1,R2 = 1.0001 * R1, 0.999 * R2
             Nvals = int(0.999 * (Nvals-1))
         if (Nvals < 100):
-            print "Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again"
+            print("Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again")
             exit()
         try_count+=1
 
         if (try_count > 30):
-            print "We are stuck trying to fix a rotation curve that can turn negative due to steep pressure gradients. Try new profile or more cells."
+            print("We are stuck trying to fix a rotation curve that can turn negative due to steep pressure gradients. Try new profile or more cells.")
 
             
     angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
@@ -614,7 +615,7 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         bin_radius = R[bin_inds == kk].mean()
         _, zmvals = disk.evaluate_enclosed_vertical(bin_radius,0,z[bin_inds == kk].max(),Nzvals=300)
     
-    print "Done."
+    print("Done.")
     
     return R,phi,z,dens,vphi,vr,press,ids
 

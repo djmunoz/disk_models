@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.random as rd
@@ -103,10 +104,16 @@ class disk2d(object):
             if (self.csndR0 is None):
                 self.csndR0 = self.sigma_disk.Rc
 
+        if (self.sigma_type == "similarity_hole"):
+            self.sigma_disk = similarity_hole_disk(**kwargs)
+            if (self.csndR0 is None):
+                self.csndR0 = self.sigma_disk.Rc
+
+                
         if (self.sigma_type is None):
             if (self.sigma_function is not None):
                 if not callable(self.sigma_function):
-                    print "ERROR: No valid surface density profile provided."
+                    print("ERROR: No valid surface density profile provided.")
                     exit()
                     
         if (self.self_gravity is None):
@@ -280,7 +287,7 @@ class disk2d(object):
         elif (scale == 'linear'):
             rvals = np.linspace(Rin,Rout,Nvals)
         else: 
-            print "[error] scale type ", scale, "not known!"
+            print("[error] scale type ", scale, "not known!")
             sys.exit()
         return rvals
 
@@ -304,12 +311,12 @@ class disk2d(object):
         if callable(function):
             self.density_perturbation_function = function
         else:
-            print "ERROR: Perturbation function provided not callable"
+            print("ERROR: Perturbation function provided not callable")
             
             
 class disk_mesh2d(object):
     def __init__(self, *args, **kwargs):
-
+        
         self.mesh_type=kwargs.get("mesh_type")
         self.Rin = kwargs.get("Rin")
         self.Rout = kwargs.get("Rout")
@@ -363,10 +370,11 @@ class disk_mesh2d(object):
 
         self.Ncells = self.NR * self.Nphi
             
-    def create(self,*args,**kwargs):
+    def create(self,disk=None,*args,**kwargs):
+        R, phi = None, None
         
         if (self.mesh_type == "polar"):
-
+            
             if (self.Rbreak is None) & (self.NR1 is None) & (self.Nphi1 is None) \
                & (self.NR2 is None) & (self.Nphi2 is None):
                 
@@ -448,24 +456,7 @@ class disk_mesh2d(object):
 
                 
             if (self.fill_box == True):
-                rvals = np.array([R.max()+self.deltaRout,R.max()+2* self.deltaRout])
-                phivals = np.arange(0,2*np.pi,2*np.pi/(0.5*self.Nphi))
-                Rback,phiback = np.meshgrid(rvals,phivals)
-                R = np.append(R,Rback.flatten())
-                phi = np.append(phi,phiback.flatten())
-
-                extent = 0.5 * self.BoxSize - 2*self.deltaRout
-                interval = 4*self.deltaRout
-                if (self.BoxSize/interval > self.fill_box_Nmax):
-                    interval = self.BoxSize/self.fill_box_Nmax
-                xback,yback = np.meshgrid(np.arange(-extent + 0.5 * interval, extent,interval),
-                                          np.arange(-extent + 0.5 * interval, extent,interval))
-                xback,yback = xback.flatten(),yback.flatten()
-                Rback = np.sqrt(xback**2+yback**2)
-                phiback = np.arctan2(yback,xback)
-                ind = Rback > R.max()+2.5 * self.deltaRout
-                Rback, phiback = Rback[ind], phiback[ind]
-
+                Rback, phiback = self.fill_box2d(radius_max = R.max())
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)
 
@@ -489,8 +480,75 @@ class disk_mesh2d(object):
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
 
-            return R,phi
+                
+        #end of "polar"
+        
+        elif (self.mesh_type == "mc"):
+            R,phi = mc_sample(disk, self.Ncells, self.Rin, self.Rout)
+            bins = np.logspace(np.log10(self.Rin), np.log10(self.Rout),0.7*np.sqrt(self.Ncells))
+            digitized = np.digitize(R, bins)
+            rvals = np.array([(R[digitized == i]).sum() for i in range(1, len(bins))])
+            numbervals = np.array([(R[digitized == i]).shape[0] for i in range(1, len(bins))])
+            numbervals = numbervals[rvals>0]
+            rvals = rvals[rvals>0]/numbervals
+            self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
+            
+            if (self.fill_box == True):
+                Rback, phiback = self.fill_box2d(radius_max = R.max())
+                R = np.append(R,Rback)
+                phi = np.append(phi,phiback)  
+                
+        return R,phi
+    
 
+    def fill_box2d(self,radius_max):
+        # First layer of cells
+        rvals = np.array([radius_max+self.deltaRout,radius_max+2* self.deltaRout])
+        phivals = np.arange(0,2*np.pi,2*np.pi/(0.5*self.Nphi))
+        Rback,phiback = np.meshgrid(rvals,phivals)
+
+        # Second layer
+        extent = 0.5 * self.BoxSize - 2*self.deltaRout
+        interval = 5*self.deltaRout
+        if (self.BoxSize/interval > self.fill_box_Nmax):
+            interval = self.BoxSize/self.fill_box_Nmax
+        xback,yback = np.meshgrid(np.arange(-extent + 0.5 * interval, extent,interval),
+                                  np.arange(-extent + 0.5 * interval, extent,interval))
+        xback[::2,1:] = xback[::2,1:] + 0.5 * np.diff(xback[::2,:],axis=1)
+        yback[:-1,::2] = yback[:-1,::2] + 0.5 * np.diff(yback[:,::2],axis=0)
+        xback,yback = xback.flatten(),yback.flatten()
+
+                    
+        Rback = np.append(Rback,np.sqrt(xback**2+yback**2))
+        phiback = np.append(phiback,np.arctan2(yback,xback))
+        ind = Rback > radius_max + 2.5 * self.deltaRout
+        Rback, phiback = Rback[ind], phiback[ind]
+        
+        return Rback, phiback
+
+    
+def mc_sample_from_mass(x,m,N):
+    m2x=interp1d(np.append([0],m),np.append([0],x),kind='linear')
+    xran = m2x(rd.random_sample(N)*max(m))
+    return xran
+
+def mc_sample(disk,Ncells,Rmin,Rmax,**kwargs):
+
+    Npoints = kwargs.get("Npoints")
+    if (Npoints is None): Npoints = Ncells
+    
+    rvals,mvals = disk.evaluate_enclosed_mass(Rmin, Rmax)
+    R = mc_sample_from_mass(rvals,mvals,int(Npoints))
+    Rmax = R.max()
+    while (R[R < Rmax].shape[0] > 1.01 * Npoints):
+        R = R[R< (0.98 * Rmax)]
+        Rmax = R.max()
+        
+    Ncells = R.shape[0]
+    phi=2.0*np.pi*rd.random_sample(int(Npoints))
+    
+    return R,phi
+    
 '''
 class snapshot():
 

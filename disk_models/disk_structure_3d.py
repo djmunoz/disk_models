@@ -18,6 +18,7 @@ from disk_density_profiles import *
 from disk_external_potentials import *
 from disk_other_functions import *
 from disk_snapshot import *
+from disk_structure_2d import mc_sample, mc_sample_from_mass
 
 
 rd.seed(42)
@@ -556,7 +557,7 @@ class disk_mesh3d():
 
 
             
-    def create(self,disk):
+    def create(self,disk=None):
         
       '''
       Create the distribution of mesh-generating points in 3D
@@ -824,7 +825,7 @@ class disk_mesh3d():
         if (Npoints is None): Npoints = self.Ncells
         
         rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout)
-        R = self.mc_sample_from_mass(rvals,mvals,int(Npoints))
+        R = mc_sample_from_mass(rvals,mvals,int(Npoints))
         Rmax = R.max()
         while (R[R < Rmax].shape[0] > 1.01 * Npoints):
             R = R[R< (0.98 * Rmax)]
@@ -868,7 +869,7 @@ class disk_mesh3d():
                                  np.sqrt(disk.Mcentral * SplineProfile(bin_radius,disk.Mcentral_soft*2.8))
             zin,zout = 0.0001 * scale_height_guess , 15 * scale_height_guess
             zvals,zmvals = disk.evaluate_enclosed_vertical(bin_radius,zin,zout,Nzvals=400)
-            zbin = self.mc_sample_from_mass(zvals,zmvals,int(1.2*N_in_bin))
+            zbin = mc_sample_from_mass(zvals,zmvals,int(1.2*N_in_bin))
             zbinmax = zbin.max()
 
             '''
@@ -918,13 +919,14 @@ class disk_mesh3d():
             zback[backbin_inds == kk] = zbackbin * (np.round(rd.random_sample(Nback_in_bin))*2 - 1)
 
         return zback
-    
+
+    '''
     def mc_sample_from_mass(self,x,m,N):
         #m2x=InterpolatedUnivariateSpline(m, x,k=1)
         m2x=interp1d(np.append([0],m),np.append([0],x),kind='linear')
         xran = m2x(rd.random_sample(N)*max(m))
         return xran
-
+    '''
                 
     def sample_fill_box(self,Lx_in,Lx_out,Ly_in,Ly_out,Lz_in,Lz_out,delta):
         
