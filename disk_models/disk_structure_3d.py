@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.random as rd
@@ -14,11 +15,11 @@ except ImportError:
   None
 
 
-from disk_density_profiles import *
-from disk_external_potentials import *
-from disk_other_functions import *
-from disk_snapshot import *
-from disk_structure_2d import mc_sample, mc_sample_from_mass
+from .disk_density_profiles import *
+from .disk_external_potentials import *
+from .disk_other_functions import *
+from .disk_snapshot import *
+from .disk_structure_2d import mc_sample, mc_sample_from_mass
 
 
 rd.seed(42)
@@ -125,11 +126,16 @@ class disk3d(object):
       self.sigma_disk = similarity_cavity_disk(**kwargs)
       if (self.csndR0 is None):
         self.csndR0 = self.sigma_disk.Rc
-          
+
+    if (self.sigma_type == "ring"):
+      self.sigma_disk = ring_disk(**kwargs)
+      if (self.csndR0 is None):
+        self.csndR0 = self.sigma_disk.Rinner
+        
     if (self.sigma_type is None):
       if (self.sigma_function is not None):
         if not callable(self.sigma_function):
-          print "ERROR: No valid surface density profile provided."
+          print("ERROR: No valid surface density profile provided.")
           exit()
                     
     if (self.sigma_cut is None):
@@ -299,10 +305,10 @@ class disk3d(object):
   def evaluate_radial_gradient(self,quantity,Rin,Rout,Nvals=1000,scale='log',radii_list=None):
     rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale,radii_list)
     if (scale == 'log'):
-      dQdlogR = np.gradient(quantity)/np.gradient(np.log10(rvals))
+      dQdlogR = np.gradient(quantity,np.log10(rvals))
       dQdR = dQdlogR/rvals/np.log(10)
     elif (scale == 'linear'):
-      dQdR = np.gradient(quantity)/np.gradient(rvals)
+      dQdR = np.gradient(quantity,rvals)
     return rvals,dQdR
 
   
@@ -316,7 +322,7 @@ class disk3d(object):
     elif (scale == 'linear'):
       rvals = np.linspace(Rin,Rout,Nvals)
     else: 
-      print "[error] scale type ", scale, "not known!"
+      print("[error] scale type ", scale, "not known!")
       sys.exit()
     return rvals
 
@@ -385,8 +391,9 @@ class disk3d(object):
         
       #def integrand(z): return np.exp(-self.vertical_potential(R,z)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2)
       #VertProfileNorm =  self.sigma_vals(R)/(2.0*quad(integrand,0,zout*15)[0])
-    zrho0=[np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
-    VertProfileNorm = self.sigma_vals(R)/(2.0*cumtrapz(zrho0,zvals))[-1]
+    csnd_sq=soundspeed(R,self.csnd0,self.l,self.csndR0)**2
+    zrho0=np.exp(-self.vertical_potential(R,zvals)/csnd_sq)
+    VertProfileNorm = self.sigma_vals(R)/2.0/cumtrapz(zrho0,zvals)[-1]
     #zrho = [VertProfileNorm * np.exp(-self.vertical_potential(R,zz)/soundspeed(R,self.csnd0,self.l,self.csndR0)**2) for zz in zvals]
     zrho = [VertProfileNorm * zrho0[kk] for kk in range(len(zrho0))]
     return zvals,zrho,VertProfileNorm
@@ -445,12 +452,13 @@ class disk3d(object):
 
     
     if not (grided):
-      if (Ncells < 50000): R_bins = 160
-      elif (Ncells < 100000): R_bins = 200
-      elif (Ncells < 200000): R_bins = 300
-      elif (Ncells < 600000): R_bins   = 400
-      else: R_bins = 600
+
+      R_bins = int(60 * np.log10(Ncells)* np.log10(Rout/Rin))
       radial_bins = self.evaluate_radial_mass_bins(Rin,Rout,R_bins)
+      #radial_bins2 = np.logspace(np.log10(Rin),np.log10(Rout),R_bins)
+      radial_bins2 = np.linspace(Rin,Rout,R_bins)
+      radial_bins =np.sqrt(radial_bins*radial_bins2)
+
       #fix the bins a bit
       #dRin = radial_bins[1]-radial_bins[0]
       #radial_bins = np.append(0,np.append(np.arange(radial_bins[1]/30,radial_bins[1],dRin/30),radial_bins[1:]))
@@ -464,8 +472,11 @@ class disk3d(object):
     zin,zout = 0.99*np.abs(zsamples).min(),1.01*np.abs(zsamples).max()
 
 
-    print "Solving vertical structure AGAIN for density evaluation at the sampled locations"
-    print "(using %i radial bins)" % radial_bins.shape[0]
+    print("Solving vertical structure AGAIN for density evaluation at the sampled locations")
+    print("(using %i radial bins)" % radial_bins.shape[0])
+
+    reference_H =  radial_bins/np.sqrt(-self.spherical_potential(radial_bins))*soundspeed(radial_bins,self.csnd0,self.l,self.csndR0)
+    #print(reference_sigma)
     for kk in range(0,radial_bins.shape[0]):
       update_progress(kk,radial_bins.shape[0])
       N_in_bin = Rsamples[bin_inds == kk].shape[0]
@@ -473,17 +484,18 @@ class disk3d(object):
         mid_plane.append(0.0)
         radii.append(radial_bins[kk])
         continue
-      #if (N_in_bin < 10) & (zout > 5*(z[bin_inds == kk]).mean()): #| (zout/200 > np.abs(z[bin_inds == kk]).max()):
-      #    zout = np.abs(z[bin_inds == kk]).mean()*5
+
       bin_radius = Rsamples[bin_inds == kk].mean()
+      reference_sigma = self.sigma_vals(bin_radius)
+
       zvals,zrhovals,rho0 = self.evaluate_vertical_structure(bin_radius,zin,zout,Nzvals=800)
+
+      dens_profile = interp1d(zvals,zrhovals,kind='linear')
+      dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))    
       mid_plane.append(rho0)
       radii.append(bin_radius)
-      dens_profile = interp1d(zvals,zrhovals,kind='linear')
-      dens[bin_inds == kk] = dens_profile(np.abs(zsamples[bin_inds == kk]))
-      #_, zmvals = self.evaluate_enclosed_vertical(bin_radius,0,zsamples[bin_inds == kk].max(),Nzvals=300)
-      #print 2 * zmvals[-1] / self.sigma_vals(bin_radius)
 
+          
     '''
     if VORONOI:
       # The center of the disk is always tricky. So we try to regularize the mesh
@@ -491,11 +503,11 @@ class disk3d(object):
       xsamples, ysamples = Rsamples * np.cos(phi_samples),Rsamples * np.sin(phi_samples)
       inner_disk = Rsamples <  5 * Rin 
       for step in range(LLOYD_STEPS):
-        print "Lloyd step #%i" % step
         vor = Voronoi(zip(xsamples[inner_disk],ysample[inner_disk],zsamples[inner_disk]))
     '''
-      
-    return dens,np.array(radii),np.array(mid_plane)
+
+    ind = np.array(mid_plane) > 0
+    return dens,np.array(radii)[ind],np.array(mid_plane)[ind]
         
     
 class disk_mesh3d():
@@ -658,7 +670,7 @@ class disk_mesh3d():
                 ind = Rback > R.max()+2.5 * self.deltaRout
                 Rback, phiback = Rback[ind], phiback[ind]
 
-                print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+                print("....inserting %i additional mesh-generating points" % (Rback.shape[0]))
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)
 
@@ -679,7 +691,7 @@ class disk_mesh3d():
                 ind = Rcenter < R.min() - 2* self.deltaRin
                 Rcenter, phicenter = Rcenter[ind], phicenter[ind]
 
-                print "....adding %i additional mesh-generating points" % (Rcenter.shape[0])
+                print("....inserting %i additional mesh-generating points" % (Rcenter.shape[0]))
                 R = np.append(R,Rcenter)
                 phi = np.append(phi,phicenter)
 
@@ -694,7 +706,8 @@ class disk_mesh3d():
           
           if (self.fill_background | self.fill_center | self.fill_box):
             Radditional, phiadditional, zadditional = np.empty([0]),np.empty([0]),np.empty([0])
-            print "Adding background mesh..."
+            print("Adding background mesh...")
+
 
           self.zmax = np.abs(z).max()
           zmax  = np.abs(z).max()
@@ -707,7 +720,7 @@ class disk_mesh3d():
                 zback = self.mc_sample_vertical_background(R,Rback,z,disk)
 
                 Rbackmax = Rback.max()
-                print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+                print("....inserting %i additional mesh-generating points" % (Rback.shape[0]))
                 Radditional = np.append(Radditional,Rback).flatten()
                 phiadditional = np.append(phiadditional,phiback).flatten()
                 zadditional = np.append(zadditional,zback).flatten()
@@ -720,7 +733,7 @@ class disk_mesh3d():
                 ind = Rback > Rbackmax
                 Rback, phiback,zback = Rback[ind], phiback[ind],zback[ind]
 
-                print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+                print("....inserting %i additional mesh-generating points" % (Rback.shape[0]))
                 Radditional = np.append(Radditional,Rback)
                 phiadditional = np.append(phiadditional,phiback)
                 zadditional = np.append(zadditional,zback)
@@ -733,11 +746,8 @@ class disk_mesh3d():
           if (self.fill_center == True):
                 rvals,mvals = disk.evaluate_enclosed_mass(self.Rin, self.Rout,Nvals=200)
                 cellmass = mvals[-1]/self.Ncells
-                #print mvals,rvals
                 #index = np.where(mvals > cellmass)
-                #print index,cellmass
                 #first_cell = rvals[index][0]
-                #print 'first cell is at',first_cell
                 m2r=interp1d(np.append([0],mvals),np.append([0],rvals),kind='linear')
                 Rmin = np.asscalar(m2r(cellmass))
 
@@ -754,7 +764,7 @@ class disk_mesh3d():
                 ind = Rcenter < Rmin 
                 Rcenter, phicenter,zcenter = Rcenter[ind], phicenter[ind],zcenter[ind]
 
-                print "....adding %i additional mesh-generating points" % (Rcenter.shape[0])
+                print("....inserting %i additional mesh-generating points" % (Rcenter.shape[0]))
                 Radditional = np.append(Radditional,Rcenter)
                 phiadditional = np.append(phiadditional,phicenter)
                 zadditional = np.append(zadditional,zcenter)
@@ -765,7 +775,7 @@ class disk_mesh3d():
 
             
           if (self.fill_box == True):
-                print "Filling computational box of side half-length %f..." % (self.BoxSize/2)
+                print("Filling computational box of side half-length %f..." % (self.BoxSize/2))
                 zmax0 = zmax
                 Rmax0 = Rmax
                 Nlayers = 0
@@ -774,16 +784,17 @@ class disk_mesh3d():
                 xbox,ybox,zbox =  self.sample_fill_box(0,Lx,0,Ly,0,Lz,delta)
                 rbox = np.sqrt(xbox**2+ybox**2)
                 ind = (rbox > Rmax0) | (np.abs(zbox) > zmax0)
-                print "....adding %i additional mesh-generating points out to x=+-%f" % (rbox[ind].shape[0],xbox.max())
-                Radditional = np.append(Radditional,rbox[ind])
-                phiadditional = np.append(phiadditional,np.arctan2(ybox[ind],xbox[ind]))
-                zadditional=np.append(zadditional,zbox[ind])
+                if (rbox[ind].shape[0] > 0):
+                  print(rbox[ind].shape)
+                  print("....inserting %i additional mesh-generating points out to x=+-%f" % (rbox[ind].shape[0],xbox.max()))
+                  Radditional = np.append(Radditional,rbox[ind])
+                  phiadditional = np.append(phiadditional,np.arctan2(ybox[ind],xbox[ind]))
+                  zadditional=np.append(zadditional,zbox[ind])
 
                 delta*=1.9
                 while (Lx < self.BoxSize-0.5*delta) | (Lz < self.BoxSize- 0.5*delta):
                 #while ((0.5*self.BoxSize > (R.max()/np.sqrt(2) + 1.5*delta))
                 #       | (0.5*self.BoxSize > (np.abs(z).max()+1.5*delta))):
-                    #print Lx, Ly, Lz,R.max()/np.sqrt(2),z.max(),delta
                     if (Nlayers > 8): break
                     Nlayers+=1
                     lmax,zetamax = Radditional.max()/np.sqrt(2), zadditional.max()
@@ -792,7 +803,7 @@ class disk_mesh3d():
 
                     xbox,ybox,zbox =  self.sample_fill_box(Lx_in,Lx,Ly_in,Ly,Lz_in,Lz,delta)
 
-                    print "....adding %i additional mesh-generating points out to x=+-%f" % (xbox.shape[0],xbox.max())
+                    print("....inserting %i additional mesh-generating points out to x=+-%f" % (xbox.shape[0],xbox.max()))
                     Radditional = np.append(Radditional,np.sqrt(xbox**2+ybox**2))
                     phiadditional = np.append(phiadditional,np.arctan2(ybox,xbox))
                     zadditional=np.append(zadditional,zbox)
@@ -803,7 +814,7 @@ class disk_mesh3d():
 
                 # Check if we added TOO MANY additional mesh points
                 if (Radditional.shape[0] > self.max_fill_mesh_points):
-                    print "...removing excessive extra points"
+                    print("...removing excessive extra points")
                     # Randomly select a subsample of size equal to the maximum allowed size
                     ind = rd.random_sample(Radditional.shape[0]) <  self.max_fill_mesh_points/Radditional.shape[0]
                     Radditional = Radditional[ind]
@@ -815,7 +826,7 @@ class disk_mesh3d():
                 z = np.append(z,zadditional)
 
 
-          print "Added a total of %i extra points\n" % Radditional.shape[0]
+          print("Added a total of %i extra points\n" % Radditional.shape[0])
           return R,phi,z
 
                              
@@ -852,7 +863,7 @@ class disk_mesh3d():
         bin_inds=np.digitize(R,radial_bins)
         z = np.zeros(R.shape[0])
 
-        print "Solving vertical structure for point location sampling:"
+        print("Solving vertical structure for point location sampling:")
         for kk in range(0,R_bins):
             update_progress(kk,R_bins)
             
@@ -879,7 +890,6 @@ class disk_mesh3d():
             if (zbin.shape[0] > N_in_bin): zbin = zbin[:N_in_bin]
             '''
             zbin1 = zbin[zbin >= (0.95 * zbinmax)]
-            #print bin_radius,N_in_bin,zbin.shape,zbinmax,zbin.min(),zbin1.shape[0],zin,zout
             zbin2 = np.random.choice(zbin[zbin < (0.95 * zbinmax)],N_in_bin - zbin1.shape[0])
             zbin  = np.append(zbin1,zbin2)
             
@@ -946,7 +956,7 @@ class disk_mesh3d():
       Rback,phiback = self.mc_sample_2d(disk,Npoints = Nback)
       zback = self.mc_sample_vertical_background(R,Rback,z,disk)
       Rbackmax = Rback.max()
-      print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+      print("....inserting %i additional mesh-generating points" % (Rback.shape[0]))
       Radditional = np.append(Radditional,Rback).flatten()
       phiadditional = np.append(phiadditional,phiback).flatten()
       zadditional = np.append(zadditional,zback).flatten()
@@ -959,7 +969,7 @@ class disk_mesh3d():
       ind = Rback > Rbackmax
       Rback, phiback,zback = Rback[ind], phiback[ind],zback[ind]
 
-      print "....adding %i additional mesh-generating points" % (Rback.shape[0])
+      print("....inserting %i additional mesh-generating points" % (Rback.shape[0]))
       Radditional = np.append(Radditional,Rback)
       phiadditional = np.append(phiadditional,phiback)
       zadditional = np.append(zadditional,zback)

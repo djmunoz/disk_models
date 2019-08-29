@@ -5,10 +5,10 @@ import numpy.random as rd
 from scipy.interpolate import interp1d
 from math import factorial
 
-from disk_density_profiles import *
-from disk_external_potentials import *
-from disk_other_functions import *
-from disk_snapshot import *
+from .disk_density_profiles import *
+from .disk_external_potentials import *
+from .disk_other_functions import *
+from .disk_snapshot import *
 
 
 def soundspeed(R,csnd0,l,R0):
@@ -127,19 +127,19 @@ class disk2d(object):
                 
         if (self.sigma_cut is None):
             try:
-                self.sigma_cut = self.sigma_disk.sigma0 * 1e-7
+                self.sigma_cut = self.sigma_disk.sigma0 * 1e-10
             except AttributeError:
                 self.sigma_cut = None
 
         if (self.sigma_back is None):
             try:
-                self.sigma_back = self.sigma_disk.sigma0 * 1e-7
+                self.sigma_back = self.sigma_disk.sigma0 * 1e-10
             except AttributeError:
                 self.sigma_back = None
                 
         if (self.sigma_floor is None):
             try:
-                self.sigma_floor = self.sigma_disk.sigma0 * 1e-7
+                self.sigma_floor = self.sigma_disk.sigma0 * 1e-10
             except AttributeError:
                 self.sigma_floor = None
                 
@@ -156,7 +156,7 @@ class disk2d(object):
             if (self.gap_steep is None):
                 self.gap_steep = 4
 
-
+                
     def sigma_vals(self,rvals):
         if (self.sigma_function is not None) & callable(self.sigma_function):
             sigma = np.vectorize(self.sigma_function)(rvals)
@@ -187,7 +187,7 @@ class disk2d(object):
 
     def evaluate_viscosity(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals,csnd =  self.evaluate_soundspeed(Rin,Rout,Nvals,scale=scale)
-        Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
+        Omega_sq = self.Mcentral/rvals**3 #* (1 + 3 * self.quadrupole_correction/rvals**2)
         nu = self.alphacoeff * csnd * csnd / np.sqrt(Omega_sq)
         return rvals, nu
     
@@ -321,6 +321,7 @@ class disk_mesh2d(object):
         self.Rin = kwargs.get("Rin")
         self.Rout = kwargs.get("Rout")
         self.Rbreak = kwargs.get("Rbreak")
+        self.Ncells = kwargs.get("Ncells")
         self.NR = kwargs.get("NR")
         self.Nphi = kwargs.get("Nphi")
         self.NR1 = kwargs.get("NR1")
@@ -345,10 +346,12 @@ class disk_mesh2d(object):
             self.Rin = 1
         if (self.Rout is None):
             self.Rout = 10
-        if (self.NR is None):
-            self.NR = 800
-        if (self.Nphi is None):
-            self.Nphi = 600
+        if (self.NR is None) & (self.Ncells is None):
+           if (self.NR1 is None) & (self.NR2 is None): 
+               self.NR = 800
+        if (self.Nphi is None) & (self.Ncells is None):
+            if (self.Nphi1 is None) & (self.Nphi2 is None): 
+                self.Nphi = 600
         if (self.Nphi_inner_bound is None):
             self.Nphi_inner_bound = self.Nphi
         if (self.Nphi_outer_bound is None):
@@ -365,11 +368,26 @@ class disk_mesh2d(object):
             self.fill_box = False
         if (self.fill_center is None):
             self.fill_center = False
-        if (self.fill_box_Nmax is None):
-            self.fill_box_Nmax = 64
 
-        self.Ncells = self.NR * self.Nphi
-            
+        if (self.NR1 is not None) & (self.NR2 is not None): 
+            if (self.NR1 == self.NR2):
+                self.NR = self.NR1
+        if (self.Nphi1 is not None) & (self.Nphi2 is not None): 
+            if (self.Nphi1 == self.Nphi2):
+                self.Nphi = self.Nphi1
+
+        if (self.Ncells is None):
+            if (self.Rbreak is None) & (self.NR is not None) & (self.Nphi is not None):
+                self.Ncells = self.NR * self.Nphi
+            else:
+                self.Ncells = self.NR1 * self.Nphi1 +  self.NR2 * self.Nphi2
+
+        if (self.fill_box_Nmax is None):
+            self.fill_box_Nmax = int(self.Ncells * 0.1)
+
+                
+        print("Nphi",self.Nphi)
+
     def create(self,disk=None,*args,**kwargs):
         R, phi = None, None
         
@@ -377,29 +395,20 @@ class disk_mesh2d(object):
             
             if (self.Rbreak is None) & (self.NR1 is None) & (self.Nphi1 is None) \
                & (self.NR2 is None) & (self.Nphi2 is None):
-                
-                rvals = np.logspace(np.log10(self.Rin),np.log10(self.Rout),self.NR+1)
-                rvals = rvals[:-1] + 0.5 * np.diff(rvals)
-                self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
-                # Add cells outside the inner boundary
-                for kk in range(self.N_inner_boundary_rings): rvals=np.append(rvals[0]-self.deltaRin, rvals)
-                # Add cells outside the outer boundary
-                for kk in range(self.N_outer_boundary_rings): rvals=np.append(rvals,rvals[-1]+self.deltaRout)
-                
-                phivals = np.linspace(0,2*np.pi,self.Nphi+1)
-                R,phi = np.meshgrid(rvals,phivals)
-                
-                if (self.mesh_alignment == "interleaved"):
-                    phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] = phi[:-1,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2] + 0.5*np.diff(phi[:,4*self.N_inner_boundary_rings:-2*self.N_outer_boundary_rings:2],axis=0)
-                    
-                phi = phi[:-1,:]
-                R = R[:-1,:]
+                R,phi = create_polar_disk(self.Rin,self.Rout,self.NR,self.Nphi,
+                                          self.N_inner_boundary_rings,self.N_outer_boundary_rings,
+                                          interleaved = self.mesh_alignment)
                 rvals = R.mean(axis=0)
+                #self.deltaRin = np.sort(np.unique(R))[1] - np.sort(np.unique(R))[0]
+                #self.deltaRout = np.sort(np.unique(R))[-1] - np.sort(np.unique(R))[-2]
+                self.deltaRin  = rvals[1]-rvals[0]
+                self.deltaRout = rvals[-1]-rvals[-2]
             
-                R, phi = R.flatten(),phi.flatten()
+                R, phi = R.flatten(),phi.flatten()     
 
             elif (self.Rbreak is not None) & (self.NR1 is not None) & (self.Nphi1 is not None) \
                  & (self.NR2 is not None) & (self.Nphi2 is not None):
+                '''
                 # Inner disk
                 rvals1 = np.logspace(np.log10(self.Rin),np.log10(self.Rbreak),self.NR1+1)
                 rvals1 = rvals1[:-1] + 0.5 * np.diff(rvals1)
@@ -428,11 +437,38 @@ class disk_mesh2d(object):
 
                 R = np.append(R1.flatten(),R2.flatten())
                 phi = np.append(phi1.flatten(),phi2.flatten())
-
+                print(R)
                 self.deltaRin = np.sort(np.unique(R))[1] - np.sort(np.unique(R))[0]
                 self.deltaRout = np.sort(np.unique(R))[-1] - np.sort(np.unique(R))[-2]
+                '''
+                # Inner disk
+                R1,phi1 = create_polar_disk(self.Rin,self.Rbreak,self.NR1,self.Nphi1,
+                                          self.N_inner_boundary_rings,0,
+                                          interleaved=self.mesh_alignment)
+                # Outer disk
+                R2,phi2 = create_polar_disk(self.Rbreak,self.Rout,self.NR2,self.Nphi2,
+                                            0,self.N_outer_boundary_rings,
+                                            interleaved=self.mesh_alignment)
+                R = np.append(R1.flatten(),R2.flatten())
+                phi = np.append(phi1.flatten(),phi2.flatten())
+                self.deltaRin = np.sort(np.unique(R))[1] - np.sort(np.unique(R))[0]
+                self.deltaRout = np.sort(np.unique(R))[-1] - np.sort(np.unique(R))[-2]
+
+            else:
+                R,phi = create_polar_disk(self.Rin,self.Rout,self.NR,self.Nphi,
+                                          self.N_inner_boundary_rings,self.N_outer_boundary_rings,
+                                          interleaved=self.mesh_alignment)
+                rvals = R.mean(axis=0)
+                #self.deltaRin = np.sort(np.unique(R))[1] - np.sort(np.unique(R))[0]
+                #self.deltaRout = np.sort(np.unique(R))[-1] - np.sort(np.unique(R))[-2]
+                self.deltaRin  = rvals[1]-rvals[0]
+                self.deltaRout = rvals[-1]-rvals[-2]
+            
+                R, phi = R.flatten(),phi.flatten()     
+
+
                 
-            if (self.Nphi_inner_bound != self.Nphi1):
+            if (self.Nphi_inner_bound != self.Nphi1) & (self.N_inner_boundary_rings >0):
                 rvals = np.sort(np.unique(R))
                 rvals_add = rvals[rvals <= rvals[2 * self.N_inner_boundary_rings - 1]]
                 rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_inner_boundary_rings)
@@ -442,7 +478,7 @@ class disk_mesh2d(object):
                 R = np.append(R,R_add[:-1,:].flatten())
                 phi = np.append(phi,phi_add[:-1,:].flatten())
                                 
-            if (self.Nphi_outer_bound != self.Nphi2):
+            if (self.Nphi_outer_bound != self.Nphi2) & (self.N_outer_boundary_rings > 0):
                 rvals_add = np.sort(np.unique(R))[-2 * self.N_outer_boundary_rings:]
                 #rvals[rvals >= rvals[-2 * self.N_outer_boundary_rings]]
                 rvals_add = np.linspace(rvals_add[0],rvals_add[-1],2 * self.N_outer_boundary_rings)
@@ -457,6 +493,7 @@ class disk_mesh2d(object):
                 
             if (self.fill_box == True):
                 Rback, phiback = self.fill_box2d(radius_max = R.max())
+                print("Adding %i background cells" % Rback.shape[0])
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)
 
@@ -485,6 +522,7 @@ class disk_mesh2d(object):
         
         elif (self.mesh_type == "mc"):
             R,phi = mc_sample(disk, self.Ncells, self.Rin, self.Rout)
+            print("Disk discretized into %i cells" % R.shape[0])
             bins = np.logspace(np.log10(self.Rin), np.log10(self.Rout),0.7*np.sqrt(self.Ncells))
             digitized = np.digitize(R, bins)
             rvals = np.array([(R[digitized == i]).sum() for i in range(1, len(bins))])
@@ -492,9 +530,10 @@ class disk_mesh2d(object):
             numbervals = numbervals[rvals>0]
             rvals = rvals[rvals>0]/numbervals
             self.deltaRin,self.deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
-            
             if (self.fill_box == True):
+                print(R.max(),self.deltaRout)
                 Rback, phiback = self.fill_box2d(radius_max = R.max())
+                print("Adding %i background cells" % Rback.shape[0])
                 R = np.append(R,Rback)
                 phi = np.append(phi,phiback)  
                 
@@ -503,29 +542,84 @@ class disk_mesh2d(object):
 
     def fill_box2d(self,radius_max):
         # First layer of cells
-        rvals = np.array([radius_max+self.deltaRout,radius_max+2* self.deltaRout])
-        phivals = np.arange(0,2*np.pi,2*np.pi/(0.5*self.Nphi))
+        rvals = np.array([radius_max+ 1.5 * self.deltaRout,radius_max+ 3* self.deltaRout])
+        if (rvals[-1] < (0.5*self.BoxSize-rvals[-1]) ):
+            rvals = np.append(rvals,min(radius_max+ 5 * self.deltaRout,0.5*self.BoxSize-rvals[-1]))
+        if (rvals[-1] < (0.5*self.BoxSize-rvals[-1]) ):
+            rvals = np.append(rvals,min(radius_max+10* self.deltaRout,0.5*self.BoxSize-rvals[-1]))
+        phivals = np.arange(0,2*np.pi,2.0/int(radius_max/2.0 / self.deltaRout))
         Rback,phiback = np.meshgrid(rvals,phivals)
-
-        # Second layer
-        extent = 0.5 * self.BoxSize - 2*self.deltaRout
-        interval = 5*self.deltaRout
-        if (self.BoxSize/interval > self.fill_box_Nmax):
-            interval = self.BoxSize/self.fill_box_Nmax
-        xback,yback = np.meshgrid(np.arange(-extent + 0.5 * interval, extent,interval),
-                                  np.arange(-extent + 0.5 * interval, extent,interval))
-        xback[::2,1:] = xback[::2,1:] + 0.5 * np.diff(xback[::2,:],axis=1)
-        yback[:-1,::2] = yback[:-1,::2] + 0.5 * np.diff(yback[:,::2],axis=0)
-        xback,yback = xback.flatten(),yback.flatten()
-
-                    
-        Rback = np.append(Rback,np.sqrt(xback**2+yback**2))
-        phiback = np.append(phiback,np.arctan2(yback,xback))
-        ind = Rback > radius_max + 2.5 * self.deltaRout
-        Rback, phiback = Rback[ind], phiback[ind]
+        phiback[1:,::2] = phiback[0:-1,::2] + 0.5 * np.diff(phiback[:,::2],axis=0)
+        phiback[0,::2]-= 0.5 * np.diff(phiback[:,::2],axis=0)[0,:]
         
+        # Additional layers
+        backmax = Rback.max()
+        interval = 8*self.deltaRout
+        count=0
+        old_extent = backmax
+        #return Rback, phiback
+        while (True):
+            if (backmax > 0.5 * self.BoxSize - interval) & (count > 0):
+                break
+            if (count > 10): break
+            #if (count > 0): break
+            
+            if (0.5 * self.BoxSize > 2 * backmax):
+                extent = backmax
+                interval = 0.2 * backmax
+            else:
+                extent = 0.5 * self.BoxSize
+            #interval = 5*self.deltaRout
+            xback,yback = np.meshgrid(np.linspace(-extent + 0.5 * interval, extent- 0.5 * interval,int(2*extent/interval)),
+                                      np.linspace(-extent + 0.5 * interval, extent- 0.5 * interval,int(2*extent/interval)))
+            xback[::2,1:-1] = xback[::2,1:-1] + 0.5 * np.diff(xback[::2,1:],axis=1)
+            yback[1:-1,::2] = yback[1:-1,::2] + 0.5 * np.diff(yback[:-1,::2],axis=0)
+            xback,yback = xback.flatten(),yback.flatten()
+            rtemp = np.sqrt(xback**2 + yback**2)
+            ind = (xback > -0.5 * self.BoxSize) &  (xback < 0.5 * self.BoxSize) &\
+                    (yback > -0.5 * self.BoxSize) &  (yback < 0.5 * self.BoxSize) & \
+                    (rtemp > backmax/np.sqrt(2.))
+
+            xback, yback = xback[ind], yback[ind]
+
+            Rback = np.append(Rback.flatten(),np.sqrt(xback**2+yback**2))
+            phiback = np.append(phiback.flatten(),np.arctan2(yback,xback))
+            backmax = Rback.max()
+            interval*=1.4
+            old_extent = extent
+            count+=1
+        ind = Rback > radius_max + 0.2 * self.deltaRout
+        Rback, phiback = Rback[ind], phiback[ind]
+        if (len(Rback) > self.fill_box_Nmax):
+            ind = rd.choice(np.arange(1,len(Rback)),self.fill_box_Nmax,replace=False)
+            Rback, phiback = Rback[ind],phiback[ind]
         return Rback, phiback
 
+def create_polar_disk(Rin,Rout,NR,Nphi,inner_rings,outer_rings,interleaved=False):
+    
+    rvals = np.logspace(np.log10(Rin),np.log10(Rout),NR+1)
+    rvals = rvals[:-1] + 0.5 * np.diff(rvals)
+
+    deltaRin, deltaRout = rvals[1]-rvals[0],rvals[-1]-rvals[-2]
+    # Add cells outside the inner boundary
+    for kk in range(inner_rings): rvals=np.append(rvals[0]-deltaRin, rvals)
+    # Add cells outside the outer boundary
+    for kk in range(outer_rings): rvals=np.append(rvals,rvals[-1]+deltaRout)
+                
+    phivals = np.linspace(0,2*np.pi,Nphi+1)
+    R,phi = np.meshgrid(rvals,phivals)
+    if (interleaved):
+        print()
+        phi[:-1,4*inner_rings+1:-4*outer_rings-1:2] = phi[:-1,4*inner_rings+1:-4*outer_rings-1:2] +\
+                                                  0.5*np.diff(phi[:,4*inner_rings+1:-4*outer_rings-1:2],axis=0)
+
+
+        R[::2,4*inner_rings+1:-4*outer_rings-1] = R[::2,4*inner_rings+1:-4*outer_rings-1] +\
+                                                  0.25*np.diff(R[::2,4*inner_rings:-4*outer_rings-1],axis=1)
+        
+    R, phi = R[:-1,:], phi[:-1,:]
+    
+    return R, phi
     
 def mc_sample_from_mass(x,m,N):
     m2x=interp1d(np.append([0],m),np.append([0],x),kind='linear')
@@ -538,17 +632,23 @@ def mc_sample(disk,Ncells,Rmin,Rmax,**kwargs):
     if (Npoints is None): Npoints = Ncells
     
     rvals,mvals = disk.evaluate_enclosed_mass(Rmin, Rmax)
+    mass_lim = mvals[-1]*(1. - 1.2/np.sqrt(Npoints))
+    comp_lim = rvals[next( i for i,x in reversed(list(enumerate(mvals))) if x < mass_lim)]
     R = mc_sample_from_mass(rvals,mvals,int(Npoints))
     Rmax = R.max()
     while (R[R < Rmax].shape[0] > 1.01 * Npoints):
         R = R[R< (0.98 * Rmax)]
         Rmax = R.max()
-        
+    while (R[R > comp_lim].shape[0] > 0):
+        R[R > comp_lim] = mc_sample_from_mass(rvals,mvals,R[R > comp_lim].shape[0])
+                     
     Ncells = R.shape[0]
     phi=2.0*np.pi*rd.random_sample(int(Npoints))
     
     return R,phi
-    
+
+
+
 '''
 class snapshot():
 

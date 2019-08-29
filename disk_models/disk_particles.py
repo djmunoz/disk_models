@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.random as rd
@@ -183,7 +184,6 @@ def KeplerEquation(mean_anom,e):
       abserr,relerr = np.abs(delta3),1.0e40
 
     ecc_anom+=delta3
-    #print iter,ecc_anom,e,delta3
     
     if (np.abs(ecc_anom) > abstol/reltol):
       if (abserr < abstol): break
@@ -223,7 +223,6 @@ def HyperbolicKeplerEquation(mean_anom,e):
       abserr,relerr = np.abs(delta3),1.0e40
       
     hyp_anom+=delta3
-    #print iter,hyp_anom,e,delta3
     
     if (np.abs(hyp_anom) > abstol/reltol):
       if (abserr < abstol): break
@@ -305,7 +304,6 @@ class particle_data():
                      a = None, e = None, I = None, g = None, h = None, l = None, ID = None):
 
         if (self.pos.shape[0] > 0):
-            print self.pos.shape
             mcm = self.mass.sum()
             poscm = self.pos.sum(axis = 0)/mcm
             velcm = self.vel.sum(axis = 0)/mcm
@@ -354,12 +352,10 @@ class particle_data():
         if np.all(distances < a) | (len(self.pos) == 1):
             mu = G * (mcm + m)
             x,y,z,vx,vy,vz =  orbit(a*(1-e),e,I,g,h,l,mu)
-            print self.pos
             self.pos = np.append(self.pos,(np.array([x, y, z])+poscm).reshape(1,3), axis=0)
             self.vel = np.append(self.vel,(np.array([vx, vy, vz])+velcm).reshape(1,3), axis=0)
             self.mass = np.append(self.mass,m)
             self.ids = np.append(self.ids,ID)
-            print self.pos
             
         else: #if not, alter the existing particles
             ind_inner = np.argwhere(distances < a)

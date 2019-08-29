@@ -1,5 +1,6 @@
+from __future__ import print_function
 import numpy as np
-from disk_spline_kernels import *
+from .disk_spline_kernels import *
 
 
 def powerlaw_sigma(R,sigma0,p,R0):
@@ -22,11 +23,16 @@ def similarity_zerotorque_sigma(R,sigma0,gamma,Rc,Rin):
 def powerlaw_cavity_sigma(R,sigma0,p,xi,R_cav):
     return sigma0 * (R_cav/R)**p * np.exp(-(R_cav/R)**xi) 
 
-def similarity_cavity_sigma(R,sigma0,gamma,Rc,xi,R_cav):
+def similarity_cavity_sigma(R,sigma0,gamma,Rc,R_cav,xi):
     exp1 = (R_cav/R)**xi
     exp2 = (R_cav/R)**2
     exp = -exp1#+exp2
     return sigma0*(R/Rc)**(-gamma) * np.exp(-(R/Rc)**(2.0-gamma)) * np.exp(exp)
+                                                                           
+def ring_sigma(R,sigma0,gamma,Rinner,Router):
+    exp1 = -(Rinner/R)**3.0
+    exp2 = -(R/Router)**4.0
+    return sigma0*(R/Rinner)**(-gamma) * np.exp(exp1) * np.exp(exp2)
                                                                            
 
 
@@ -117,7 +123,6 @@ class similarity_disk(object):
         if (self.floor is None):
             self.floor = 0.0
 
-        print self.Rc,self.gamma,self.sigma0
 
     def evaluate(self,R):
         return np.maximum(self.floor,similarity_sigma(R,self.sigma0,self.gamma,self.Rc))
@@ -240,6 +245,30 @@ class similarity_cavity_disk(object):
             self.xi = 4.0
         if (self.floor is None):
             self.floor = 0.0
-
     def evaluate(self,R):
         return np.maximum(self.floor,similarity_cavity_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_cav,self.xi))
+        #return similarity_cavity_sigma(R,self.sigma0,self.gamma,self.Rc,self.R_cav,self.xi)
+
+class ring_disk(object):
+    def __init__(self, *args, **kwargs):
+
+        self.sigma0 = kwargs.get("sigma0")
+        self.gamma = kwargs.get("gamma")
+        self.Rinner = kwargs.get("Rinner")
+        self.Router = kwargs.get("Router")
+        self.floor = kwargs.get("floor") 
+        
+        #set default values
+        if (self.sigma0 is None):
+            self.sigma0 = 1.0
+        if (self.gamma is None):
+            self.gamma = 1.0
+        if (self.Rinner is None):
+            self.Rinner = 1.0
+        if (self.Router is None):
+            self.Router = 1.0
+        if (self.floor is None):
+            self.floor = 0.0
+    def evaluate(self,R):
+        return np.maximum(self.floor,ring_sigma(R,self.sigma0,self.gamma,self.Rinner,self.Router))
+

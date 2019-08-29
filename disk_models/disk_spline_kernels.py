@@ -37,6 +37,32 @@ def W(R,h):
     return wk
 
 
+def Whalf(R,h):
+   
+    h_inv = 1.0 / h
+    h3_inv = h_inv**3
+    u = R * h_inv
+    wk = u * 0
+    utilde = u * 2
+    
+    if (isinstance(R,(list, tuple, np.ndarray))):
+        ind1 = utilde < 0.5
+        ind2 = (utilde >= 0.5) & (utilde < 1.0)
+        ind3 = utilde >= 1.0
+        wk[ind1] = h3_inv * (KERNEL_COEFF_1 + KERNEL_COEFF_2 * utilde[ind1]**2 *(utilde[ind1] - 1))
+        wk[ind2] = h3_inv * KERNEL_COEFF_5 * (1 - utilde[ind2] )**3
+        wk[ind3] = 0
+    else:
+        if(R < h):
+            if(utilde < 0.5):
+                wk = h3_inv * (KERNEL_COEFF_1 + KERNEL_COEFF_2 * utilde**2 *(utilde - 1))
+            elif (u < 1.0):
+                wk = h3_inv * KERNEL_COEFF_5 * (1 - utilde)**3
+        else:
+            wk = 0
+                
+    return wk
+
 def Wprime(R,h):
    
     h_inv = 1.0 / h
@@ -215,7 +241,7 @@ if __name__ == '__main__':
     plt.plot(r,r**1.5*g1(r,1.0),label=r'$rg_1$',lw=3.0,alpha=0.4)
     plt.plot(r,-np.gradient(np.sqrt(g1(r,1.0)))/np.gradient(r),
              color='purple',label=r"$-g_1'$",lw=3.0,alpha=0.4)
-    plt.plot(r,r**2*np.sqrt(g2(r,1.0)),label=r'$r^2g_2$')
+    plt.plot(r,r**2*np.sqrt(g2(r,1.0)),label=r'$r^2g_2$',color='g',lw=4.0,alpha=0.4)
     plt.plot(r,r*g2(r,1.0)/np.sqrt(g1(r,1.0))/2,label=r'$d\Omega/dr$')
     #plt.plot(r,g3(r,1.0),label=r'$g_3$')
     #plt.plot(r,g4(r,1.0),label=r'$g_4$')
@@ -226,4 +252,9 @@ if __name__ == '__main__':
 
     plt.plot(r,W(r,1.0))
     plt.plot(r,-Wprime(r,1.0))
+    plt.show()
+
+    plt.plot(r,W(r,1.0)/KERNEL_COEFF_1*1.0**3)
+    plt.plot(r,W(r,0.5)/KERNEL_COEFF_1*0.5**3)
+    plt.plot(r,Whalf(r,1.0)/KERNEL_COEFF_1)
     plt.show()

@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 Methods and functions to rotate or warp a pre-existing (3D) disk model
 
@@ -31,7 +32,6 @@ def rotate_disk(pos,vel,theta,phi,dens_threshold = 0):
     # extract positions and velocities
     pos = snapshot.gas.pos.copy()
     vel = snapshot.gas.vel.copy()
-    print pos.shape, vel.shape
     
     # define rotation matrices
     mat1 = np.array([[1,0,0],\
@@ -50,7 +50,6 @@ def rotate_disk(pos,vel,theta,phi,dens_threshold = 0):
     newpos[:,0]+=R0[0]
     newpos[:,1]+=R0[1]
     newpos[:,2]+=R0[2]
-    print newpos.shape,newvel.shape
     
     snapshot.gas.pos = newpos
     snapshot.gas.vel = newvel

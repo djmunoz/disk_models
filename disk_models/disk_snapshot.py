@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
-from disk_hdf5 import snapHDF5 as ws
+from .disk_hdf5 import snapHDF5 as ws
 import itertools, sys
 
 from scipy.integrate import quad
@@ -14,8 +14,8 @@ except ImportError:
     
 import scipy.integrate as integ
 
-from disk_parameter_files import *
-from disk_particles import *
+from .disk_parameter_files import *
+from .disk_particles import *
 
 
 STAR_PARTTYPE = 4
@@ -94,7 +94,7 @@ class snapshot():
         ff = 1.0
         ind = (R < ff * 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
         while (R[ind].shape[0] < 10):
-            ind = (R < ff * 1.2 * disk_mesh.Rout) & ((R > disk_mesh.Rout))
+            ind = (R < ff * 1.2 * disk_mesh.Rout) & ((R > 1.0/ff *disk_mesh.Rout))
             ff*=1.05
             
         self.params.max_volume = 4.0/3*np.pi * disk_mesh.Rout**3 * (1.2**3-1.0)/ R[ind].shape[0]
@@ -204,7 +204,7 @@ class snapshot():
         x = R*np.cos(phi)
         y = R*np.sin(phi)
         points = np.array([x,y,z]).T
-        #print "Voronoi"
+        #print("Voronoi")
         #vor = Voronoi(points)
         
         R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
@@ -240,7 +240,7 @@ class snapshot():
                 R1,R2 = 1.0001 * R1, 0.999 * R2
                 Nvals = int(0.999 * (Nvals-1))
             if (Nvals < 500):
-                print "Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again"
+                print("Error: Disk TOO THICK or number of cells TOO LOW to capture rotation curve accurately. Try again")
                 exit()
                     
             
@@ -463,12 +463,14 @@ def assign_primitive_variables_2d(disk,disk_mesh):
             ind_outer_outside = np.repeat(0,R.shape[0]).astype(bool)
         ids[ind_inner_outside+ind_outer_outside] = -2
 
+        '''
         if (disk.sigma_back is not None):
             dens[ind_inner_outside+ind_outer_outside] = disk.sigma_back
-            vr[dens <= disk.sigma_back] = 0
-            vphi[dens <= disk.sigma_back] = 0
-            press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
-
+            if len(dens[dens <= disk.sigma_back]) > 0:
+                vr[dens <= disk.sigma_back] = 0
+                vphi[dens <= disk.sigma_back] = 0
+                press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
+        '''
             
         #or buffer cells (only if there are boundaries at the interface)
         ind_inner = (R < (disk_mesh.Rin - disk_mesh.N_inner_boundary_rings * disk_mesh.deltaRin))
@@ -479,10 +481,11 @@ def assign_primitive_variables_2d(disk,disk_mesh):
         
         if (disk.sigma_back is not None):
             dens[ind_inner+ind_outer] = disk.sigma_back
-            vr[dens <= disk.sigma_back] = 0
-            vphi[dens <= disk.sigma_back] = 0
-            press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
-
+            if len(dens[dens <= disk.sigma_back]) > 0:
+                vr[dens <= disk.sigma_back] = 0
+                vphi[dens <= disk.sigma_back] = 0
+                press[dens <= disk.sigma_back] = press[dens <= disk.sigma_back].min()
+                
 
         vphi[ids < -2] = 0
         vr[ids < -2] = 0
@@ -502,25 +505,27 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     x = R*np.cos(phi)
     y = R*np.sin(phi)
     points = np.array([x,y,z]).T
-    #print "Voronoi"
     #vor = Voronoi(points)
         
     R1,R2 = min(1e-4,0.9*R.min()),1.5*disk_mesh.Rout
     #obtain density of cells
     dens, radii, midplane_dens = disk.solve_vertical_structure(R,phi,z,R1,R2,disk_mesh.Ncells)
     dens_cut = max(midplane_dens[-1],midplane_dens[midplane_dens > 0].min())/100
-    if (midplane_dens[0] < dens_cut): dens_cut /= 100
-    
-    radii = np.append(radii,R2)
-    midplane_dens = np.append(midplane_dens,dens_cut)
+    if (midplane_dens[0] < dens_cut): dens_cut /= 1000
+
+
+    #radii = np.append(radii,R2)
+    #midplane_dens = np.append(midplane_dens,dens_cut)
     dens[dens < dens_cut] = dens_cut
-    midplane_dens[midplane_dens < dens_cut] = dens_cut
+    #midplane_dens[midplane_dens < dens_cut] = dens_cut
     print("Density cutoff is:", dens_cut)
     #window_length = 20
     #weights = np.exp(np.linspace(-1., 0., window_length))
     #midplane_dens = np.convolve(midplane_dens,weights/np.sum(weights),mode='same')
-    dens0_profile =  interp1d(radii,midplane_dens,kind='linear',fill_value='extrapolate')
+    logdens0_profile =  interp1d(radii,np.log(midplane_dens),kind='linear',fill_value=np.log(dens_cut),bounds_error=False)
+
     
+
     #evaluate other quantities
     Nvals = 1200 # this number being large can be critical when steep pressure gradients are present
 
@@ -533,8 +538,9 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         scale = 'log'
         R1,R2 = 0.99*R.min(),disk_mesh.Rout
 
+    
     try_count = 0
-    Nvals = 1200
+    Nvals = 200
 
     spinner = itertools.cycle(['-', '/', '|', '\\'])
 
@@ -547,13 +553,31 @@ def assign_primitive_variables_3d(disk,disk_mesh):
                                                                          scale=scale)
 
         _, sound_speed = disk.evaluate_soundspeed(R1,R2,Nvals=Nvals,scale=scale)
-        pressure_midplane = dens0_profile(radii) * sound_speed**2
+        pressure_midplane = np.exp(logdens0_profile(radii)) * sound_speed**2
 
         _,pressure_midplane_gradient =  disk.evaluate_radial_gradient(pressure_midplane,R1,R2,Nvals=Nvals,
                                                                       scale=scale)
         _,soundspeed_sq_gradient =  disk.evaluate_radial_gradient(sound_speed**2,R1,R2,Nvals=Nvals,
                                                                   scale=scale)
-        if np.all((angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii) > 0):
+
+        pressure_buffer = sound_speed**2 * disk.evaluate_radial_gradient(logdens0_profile(radii),R1,R2,Nvals=Nvals, scale=scale)[1] / radii + soundspeed_sq_gradient / radii
+        print(pressure_buffer)
+        omega_sq = (angular_frequency_sq + pressure_buffer)
+        print(R1,R2,disk_mesh.Rin,disk_mesh.Rout)
+        plt.plot(radii,angular_frequency_sq,color='b')
+        plt.plot(radii,pressure_midplane_gradient/np.exp(logdens0_profile(radii))/radii,color='r')
+        plt.plot(radii,pressure_buffer,'g+')
+        plt.plot(radii,omega_sq,color='orange')
+        plt.plot(radii,(0.5*soundspeed_sq_gradient+sound_speed**2*(disk.evaluate_radial_gradient(np.log(disk.sigma_vals(radii)),R1,R2,Nvals=Nvals, scale=scale)[1]-1.5/radii))/radii,color='magenta')
+        #plt.plot(radii,omega)
+        #plt.plot(radii,np.exp(logdens0_profile(radii)),color='purple',marker='+')
+        #plt.plot(radii,
+        #         disk.evaluate_sigma(R1,R2,Nvals=Nvals,scale=scale)[1]/np.sqrt(2*np.pi)/sound_speed*np.sqrt(angular_frequency_sq),\
+        #         color='orange')
+        plt.xscale('log')
+        #plt.yscale('log')
+        plt.show()
+        if np.all(omega_sq > 0):
             break
         else:
             R1,R2 = 1.0001 * R1, 0.999 * R2
@@ -564,10 +588,11 @@ def assign_primitive_variables_3d(disk,disk_mesh):
         try_count+=1
 
         if (try_count > 30):
+            plt.show()
             print("We are stuck trying to fix a rotation curve that can turn negative due to steep pressure gradients. Try new profile or more cells.")
-
+        
             
-    angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_midplane_gradient/dens0_profile(radii)/radii)
+    angular_frequency_midplane = np.sqrt(angular_frequency_sq + pressure_buffer)
             
     #update mesh radial limits
     disk_mesh.Rin, disk_mesh.Rout = radii.min(),radii.max()
@@ -584,7 +609,7 @@ def assign_primitive_variables_3d(disk,disk_mesh):
     press[ind_in] = dens[ind_in] * soundspeedsq_profile(R[ind_in])
 
     # behavior outside the disk
-    ind_out = (R >= disk_mesh.Rout) | (np.abs(z) >= 1.5 * disk_mesh.zmax) | (R <= disk_mesh.Rin) 
+    ind_out = ((R >= disk_mesh.Rout) & (ids != -2 ))| (np.abs(z) >= 1.5 * disk_mesh.zmax) | (R <= disk_mesh.Rin) 
     vphi[ind_out] = 0
     dens[ind_out] = dens_cut/10000000
     def soundspeed(R): return disk.csnd0 * (R/disk.csndR0)**(-disk.l*0.5)

@@ -2,6 +2,7 @@
 #--------------------------------#
 # disk_parameter_files.py
 #--------------------------------#
+from __future__ import print_function
 """ 
 Functions to generate AREPO/GADGET parameter files in consistency with initial conditions
 created by the disks_3d_models module
@@ -14,7 +15,6 @@ __author__= 'Diego J. Munoz'
 
 import numpy as np
 from collections import OrderedDict
-
 
 # Dictionary containing all possible parameters
 parameters_basic = {
@@ -126,8 +126,11 @@ parameters_other = OrderedDict([
     ("MaxBackgroundVolume","max_background_volume"),
     ("MinBackgroundVolume","min_background_volume"),
     ("MinBackgroundMass","min_background_mass"),
+    ("MeanVolume","mean_volume"),
     ("IgnoreRefinementsBeyondThisRadius","ignore_refinements_beyond_this_radius"),
     ("IgnoreRefinementsWithinThisRadius","ignore_refinements_within_this_radius"),
+    ("CircumstellarSoundSpeedDefault","circumstellar_sound_speed_default"),
+    ("CircumstellarTempProfileIndex","circumstellar_temp_profile_index"),
     # Boundaries options
     ("BoundaryLayerScaleFactor","boundary_layer_scale_factor"),
     ("SpecialBoundarySpeed","special_boundary_speed"),
@@ -143,7 +146,12 @@ parameters_other = OrderedDict([
     # Accretion options
     ("CircumstellarSinkRadius","circumstellar_sink_radius"), 
     ("CircumstellarSinkCriterion","circumstellar_sink_criterion"),
-    ("CircumstellarSinkEfficiency","circumstellar_sink_efficiency") 
+    ("CircumstellarSinkEfficiency","circumstellar_sink_efficiency"),
+    # Central Potential options
+    ("CentralMass", "central_mass"),
+    ("CentralMassSoftening", "central_mass_softening"),
+    ("CentralAccretionRadius","central_accretion_radius"),
+    ("CentralAccretionMethod","central_accretion_method")
 ])
 
 
@@ -416,8 +424,6 @@ class paramfile():
         if (self.cell_max_angle_factor is None):
             self.cell_max_angle_factor = 1.4
 
-        if (self.mean_volume is None):
-            self.mean_volume = 1.0
         if (self.reference_gas_part_mass is None):
             self.reference_gas_part_mass = 1.0
         if (self.target_gas_mass_factor is None):
@@ -558,13 +564,15 @@ class paramfile():
             attr= parameters_other[paramname]
             if attr in self.__dict__.keys():
                 if (attr is not None):
-                    paramname= parameters_other.keys()[parameters_other.values().index(attr)]
-                    if (len(paramname) > 25):
-                        f.write("%s\t%s\n" % (paramname, getattr(self,attr)))
-                    elif (len(paramname) > 15):
-                        f.write("%s\t\t%s\n" % (paramname, getattr(self,attr)))
-                    else:
-                        f.write("%s\t\t\t%s\n" % (paramname, getattr(self,attr)))
+                    if (getattr(self,attr) is not None):
+                        #paramname= parameters_other.keys()[parameters_other.values().index(attr)]
+                        paramname= list(parameters_other.keys())[list(parameters_other.values()).index(attr)]
+                        if (len(paramname) > 25):
+                            f.write("%s\t%s\n" % (paramname, getattr(self,attr)))
+                        elif (len(paramname) > 15):
+                            f.write("%s\t\t%s\n" % (paramname, getattr(self,attr)))
+                        else:
+                            f.write("%s\t\t\t%s\n" % (paramname, getattr(self,attr)))
 
         # Disk parameters
 
@@ -592,9 +600,9 @@ class paramfile():
                 if ('\t' in paramname): paramname=paramname.split('\t')[0]
                 paramval = line[len(paramname):].strip()
                 if (' ' in paramval): paramval = paramval.split(' ')[0]
-                if (parameters_basic.has_key(paramname)):
+                if (paramname in parameters_basic):
                     setattr(self, parameters_basic[paramname], paramval)
-                if (parameters_other.has_key(paramname)):
+                if (paramname in parameters_other):
                     setattr(self, parameters_other[paramname], paramval)
                     
                 '''
