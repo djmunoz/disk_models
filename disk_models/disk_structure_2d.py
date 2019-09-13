@@ -40,8 +40,9 @@ class disk2d(object):
         #central object
         self.Mcentral = kwargs.get("Mcentral")
         self.Mcentral_soft = kwargs.get("Mcentral_soft")
+        self.softening_type = kwargs.get("softening_type")
         self.quadrupole_correction =  kwargs.get("quadrupole_correction")
-
+        
         #corrections to density profile by a gap
         self.add_gap = kwargs.get("add_gap")
         if (self.add_gap is True):
@@ -74,6 +75,8 @@ class disk2d(object):
             self.Mcentral = 1.0
         if (self.Mcentral_soft is None):
             self.Mcentral_soft = 0.0
+        if (self.softening_type is None):
+            self.softening_type = "spline"
         if (self.quadrupole_correction is None):
             self.quadrupole_correction = 0
         if (self.sigma_type is None):
@@ -230,13 +233,37 @@ class disk2d(object):
             selfgravity_vcirc_in_plane = np.append(selfgravity_vcirc_in_plane,vcircsquared_0+delta_vcirc)
         '''
         return rvals, None
-       
-    def evaluate_rotation_curve(self,Rin,Rout,Nvals=1000,scale='log'):
+
+    def evaluate_angular_freq_central_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
+        if (self.softening_type == 'spline'):
+            Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft*2.8) * (1 + 3 * self.quadrupole_correction/rvals**2)
+        elif (self.softening_type == 'plummer'):
+            Omega_sq = self.Mcentral / (rvals**2 + self.Mcentral_soft**2)**1.5 * (1 + 3 * self.quadrupole_correction/rvals**2)
+            
+        return rvals, Omega_sq
+    
+    def evaluate_angular_freq_external_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
+        return self.evaluate_angular_freq_central_gravity(Rin,Rout,Nvals,scale)
+    
+    
+    def evaluate_angular_freq_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
+        rvals, Omega_sq = self.evaluate_angular_freq_external_gravity(Rin,Rout,Nvals,scale)
         if (self.self_gravity):
             _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale)
-            Omega_sq += Omega_sq_sg 
+            Omega_sq += Omega_sq_sg
+
+        return rvals, Omega_sq 
+
+    
+    def evaluate_rotation_curve(self,Rin,Rout,Nvals=1000,scale='log'):
+        rvals, Omega_sq  = self.evaluate_angular_freq_gravity(Rin,Rout,Nvals,scale)
+        
+        #rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
+        #Omega_sq = self.Mcentral/rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
+        #if (self.self_gravity):
+        #    _, Omega_sq_sg = self.evaluate_angular_freq_self_gravity(Rin,Rout,Nvals,scale)
+        #    Omega_sq += Omega_sq_sg 
             
         return rvals, np.sqrt(Omega_sq + self.evaluate_pressure_gradient(Rin,Rout,Nvals,scale=scale)[1] / \
             self.evaluate_sigma(Rin,Rout,Nvals,scale=scale)[1]/ rvals)

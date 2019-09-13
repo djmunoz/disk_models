@@ -59,6 +59,7 @@ class disk3d(object):
     #central object
     self.Mcentral = kwargs.get("Mcentral")
     self.Mcentral_soft = kwargs.get("Mcentral_soft")
+    self.softening_type = kwargs.get("softening_type")
     self.quadrupole_correction =  kwargs.get("quadrupole_correction")
     # potential type
     self.potential_type = kwargs.get("potential_type")
@@ -86,7 +87,9 @@ class disk3d(object):
     if (self.Mcentral is None):
       self.Mcentral = 1.0
     if (self.Mcentral_soft is None):
-      self.Mcentral_soft = 0.01
+      self.Mcentral_soft = 0.0
+    if (self.softening_type is None):
+      self.sotening_type = 'spline'  
     if (self.quadrupole_correction is None):
       self.quadrupole_correction = 0
     if (self.potential_type is None):
