@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 import disk_models as dm
@@ -93,7 +94,8 @@ if __name__=="__main__":
     NR1 = NR
     NR2 = int((np.log10(Rout)-np.log10(Rbreak))/
                (np.log10(Rbreak)-np.log10(Rin)) * NR / 1.5)
-    print NR1,NR2
+    print(NR1,NR2)
+    print("haha")
     Nphi1 = Nphi
     Nphi2 = int(Nphi/1.5)
 
@@ -101,6 +103,7 @@ if __name__=="__main__":
                           mesh_alignment = "interleaved",
                           NR1=NR1,Nphi1=Nphi1,
                           NR2=NR2,Nphi2=Nphi2,
+                          Nphi_inner_bound = Nphi1,
                           Nphi_outer_bound = Nphi2,
                           fill_center=False,fill_box=True,BoxSize=BOX,
                           N_inner_boundary_rings=2,
@@ -117,10 +120,12 @@ if __name__=="__main__":
     # Write files
     s.write_snapshot(d,mesh,filename='disk_qb%.2f_eb%.2f_alpha%.2f_h%.2f.hdf5' % (qb,eb,alpha,h0),
                      relax_density_in_input = True)
-    print s.params.cpu_time_bet_restart_file
     s.params.read('param_example.txt')
+    s.params.reference_gas_part_mass= np.around(0.007 * sigma0 * 4*np.pi**2 * 1**2/Nphi1**2,decimals=6)
+    s.params.min_volume = np.around(0.008 * np.pi * float(s.params.circumstellar_sink_radius)**2,decimals=8)
+    s.params.max_volume = 20 * np.around(5*np.pi**2 * 1**2/Nphi1**2,decimals=6)
+    s.params.max_volume_diff = 8
     s.params.time_limit_cpu=28000 
-    s.params.reference_gas_part_mass=1.1e-4
     s.params.target_gas_mass_factor=1.0    
     s.params.courant_fac=0.25
     s.params.max_size_timestep=0.1
@@ -137,40 +142,18 @@ if __name__=="__main__":
     s.params.binary_mass_ratio = qb
     s.write_parameter_file(d,mesh,filename='param_qb%.2f_eb%.2f_alpha%.2f_h%.2f.txt' % (qb,eb,alpha,h0))
 
-    print "Simulation parameters"
-    print "alpha=",alpha
-    print "h0=",h0
-    print "qb=",qb
-    print "eb=",eb
-    print "InnerRadius=",Rin
-    print "Outer density",sigma_model(Rout)
-    print "Number of cells:",s.gas.pos.shape[0]
+    print("Simulation parameters")
+    print("alpha=",alpha)
+    print("h0=",h0)
+    print("qb=",qb)
+    print("eb=",eb)
+    print("InnerRadius=",Rin)
+    print("Outer density",sigma_model(Rout))
+    print("Number of cells:",s.gas.pos.shape[0])
+    print("Target mass", s.params.reference_gas_part_mass)
+
+
     rad = np.sqrt((s.gas.pos[:,0]-mesh.BoxSize*0.5)**2 + (s.gas.pos[:,1]-mesh.BoxSize*0.5)**2)
-    ind = np.abs(rad - 1.7) == np.abs(rad - 1.7).min()
-    radref0= rad[ind].mean()
-    radref1 = rad[rad > radref0].min()
-    print "Target mass", s.gas.dens[ind].mean() * (radref1 - radref0) * radref0 * 2 * np.pi / mesh.Nphi
-    
-
-
-    
-    '''
-    ind = s.gas.ids < -2
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'g.')
-    ind = s.gas.ids == -2
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'r.')
-    ind = s.gas.ids == -1
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'b.')
-    ind = s.gas.ids >= 0
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'k.',ms=1.0)   
-    plt.xlim(0.5*mesh.BoxSize-mesh.Rout,0.5*mesh.BoxSize+mesh.Rout)
-    plt.ylim(0.5*mesh.BoxSize-mesh.Rout,0.5*mesh.BoxSize+mesh.Rout)
-    plt.show()
-    exit()
-    '''
-    print s.gas.ids[(rad < Rout) & (rad > Rbreak)]
-    
-
     ind = s.gas.ids < -2
     plt.plot(rad[ind],s.gas.dens[ind],'g.')
     ind = s.gas.ids == -2
@@ -181,105 +164,5 @@ if __name__=="__main__":
     plt.plot(rad[ind],s.gas.dens[ind],'k.')
     radii = np.linspace(1,70,500)
     plt.plot(radii,sigma_model(radii),color='red')
-    plt.show()
-
-    #exit()
-
-    
-    '''
-    r, sigma = d.evaluate_sigma(1,70)
-    _, vr = d.evaluate_radial_velocity(1,70)
-    vphi = d.evaluate_rotation_curve(1,70)[1] * r
-
-    jdotadv = -2 * np.pi * r**2 * vr * vphi * sigma
-    jdotvisc = -2 * np.pi * r**(3.5) * alpha * h0**2 * sigma * \
-               d.evaluate_radial_gradient(vphi/r,1.0,70)[1]
-
-    vrsteady= -Mdot_out/2/np.pi/r/sigma/r**2/(vphi/r) * l0 + \
-              alpha  *h0**2 * r**0.5 / (vphi/r) * d.evaluate_radial_gradient(vphi/r,1.0,70)[1]
-
-    vrmean = 0.5 * (vr + vrsteady)
-    plt.plot(r,vr)
-    #plt.plot(r,vrsteady)
-    plt.ylim(-0.004,0.001)
-    #plt.plot(r,np.abs(vr-vrsteady)/np.abs(vrmean))
-    #plt.ylim(0,0.05)
-    plt.show()
-    exit()
-    '''
-    
-    rad = np.sqrt((s.gas.pos[:,0]-mesh.BoxSize*0.5)**2 + (s.gas.pos[:,1]-mesh.BoxSize*0.5)**2)
-    phi = np.arctan2((s.gas.pos[:,1]-mesh.BoxSize*0.5),(s.gas.pos[:,0]-mesh.BoxSize*0.5))
-    vphi = -s.gas.vel[:,0] * np.sin(phi) + s.gas.vel[:,1] * np.cos(phi)
-    vr = +s.gas.vel[:,0] * np.cos(phi) + s.gas.vel[:,1] * np.sin(phi)
-    mdot = -vr * s.gas.dens * 2 * np.pi * rad
-    
-    '''
-    ind = s.gas.ids < -2
-    plt.plot(rad[ind],vphi[ind] ,'g.')
-    ind = s.gas.ids == -2
-    plt.plot(rad[ind],vphi[ind],'r.')
-    ind = s.gas.ids == -1
-    plt.plot(rad[ind],vphi[ind],'b.')
-    ind = s.gas.ids >= 0
-    plt.plot(rad[ind],vphi[ind],'k.')
-    plt.show()
-    exit()
-    '''
-
-
-    ind = s.gas.ids < -2
-    plt.plot(rad[ind],vr[ind] ,'g.')
-    ind = s.gas.ids == -2
-    plt.plot(rad[ind],vr[ind],'r.')
-    ind = s.gas.ids == -1
-    plt.plot(rad[ind],vr[ind],'b.')
-    ind = s.gas.ids >= 0
-    plt.plot(rad[ind],vr[ind],'k.')
-
-    
-    #radii = np.linspace(1,70,500)
-    #plt.plot(radii,velr_function(radii),color='red')
-    #r, vr = d.evaluate_radial_velocity_viscous(1,70)
-    #plt.plot(r,vr,color='green')
-    plt.show()
-    #exit()
-
-
-
-
-    ind = s.gas.ids < -2
-    plt.plot(rad[ind],mdot[ind] ,'g.')
-    ind = s.gas.ids == -2
-    plt.plot(rad[ind],mdot[ind],'r.')
-    ind = s.gas.ids == -1
-    plt.plot(rad[ind],mdot[ind],'b.')
-    ind = s.gas.ids >= 0
-    plt.plot(rad[ind],mdot[ind],'k.')
-    plt.ylim(0.5,1.5)
-    plt.show()
-    exit()
-
-
-    
-    #plt.plot(rad[ind],vr[ind] * s.gas.dens[ind] * rad[ind],'b.')
-    #plt.plot(rad[ind],vphi[ind],'b.')
-    #plt.show()
-
-
-    print s.gas.dens
-    print "what"
-    #plt.plot(s.gas.pos[:,0],s.gas.pos[:,1],'b.')
-    #plt.plot(s.gas.pos[:,0],s.gas.pos[:,2],'b.')
-    #plt.xlim(0.5*mesh.BoxSize-mesh.Rout,0.5*mesh.BoxSize+mesh.Rout)
-    #plt.ylim(0.5*mesh.BoxSize-mesh.Rout,0.5*mesh.BoxSize+mesh.Rout)
-    #plt.show()
-
-    ind = s.gas.ids < -2
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'.',color='purple')
-    ind = s.gas.ids == -2
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'.',color='r')
-    ind = s.gas.ids == -1
-    plt.plot(s.gas.pos[ind,0],s.gas.pos[ind,1],'.',color='b')
     plt.show()
 

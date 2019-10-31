@@ -159,7 +159,7 @@ class disk2d(object):
             if (self.gap_steep is None):
                 self.gap_steep = 4
 
-                
+
     def sigma_vals(self,rvals):
         if (self.sigma_function is not None) & callable(self.sigma_function):
             sigma = np.vectorize(self.sigma_function)(rvals)
@@ -236,10 +236,13 @@ class disk2d(object):
 
     def evaluate_angular_freq_central_gravity(self,Rin,Rout,Nvals=1000,scale='log'):
         rvals = self.evaluate_radial_zones(Rin,Rout,Nvals,scale)
-        if (self.softening_type == 'spline'):
-            Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft*2.8) * (1 + 3 * self.quadrupole_correction/rvals**2)
-        elif (self.softening_type == 'plummer'):
-            Omega_sq = self.Mcentral / (rvals**2 + self.Mcentral_soft**2)**1.5 * (1 + 3 * self.quadrupole_correction/rvals**2)
+        if (self.Mcentral_soft > 0):
+            if (self.softening_type == 'spline'):
+                Omega_sq = self.Mcentral * SplineDerivative(rvals,self.Mcentral_soft*2.8) * (1 + 3 * self.quadrupole_correction/rvals**2)
+            elif (self.softening_type == 'plummer'):
+                Omega_sq = self.Mcentral / (rvals**2 + self.Mcentral_soft**2)**1.5 * (1 + 3 * self.quadrupole_correction/rvals**2)
+        else:
+            Omega_sq = self.Mcentral / rvals**3 * (1 + 3 * self.quadrupole_correction/rvals**2)
             
         return rvals, Omega_sq
     
