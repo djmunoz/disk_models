@@ -1,0 +1,137 @@
+
+%----  Relevant files
+InitCondFile		 disk.dat
+OutputDir		 ./output/
+SnapshotFileBase	 snap
+OutputListFilename	 outputs_fine.txt
+
+%---- File formats
+ICFormat		 3
+SnapFormat		 3
+
+%---- CPU-time limits
+TimeLimitCPU		 518400
+CpuTimeBetRestartFile	 1000
+ResubmitOn		 0
+ResubmitCommand		 my-scriptfile
+
+%----- Memory alloction
+MaxMemSize		 2500
+
+%---- Caracteristics of run
+TimeBegin		 0 
+TimeMax			 23247.7856366 
+
+%---- Basic code options that set the type of simulation
+ComovingIntegrationOn	 0
+PeriodicBoundariesOn	 1
+CoolingOn		 0
+StarformationOn		 0
+
+%---- Cosmological parameters
+Omega0		 0
+OmegaLambda	 0
+OmegaBaryon	 0
+HubbleParam	 0.0
+BoxSize		 50.0
+
+%---- Output frequency and output paramaters
+OutputListOn			 0
+TimeBetSnapshot			 31.4159265359
+TimeOfFirstSnapshot		 0.0
+TimeBetStatistics		 2.0
+NumFilesPerSnapshot		 1
+NumFilesWrittenInParallel	 1
+
+%---- Accuracy of time integration
+TypeOfTimestepCriterion		 0
+ErrTolIntAccuracy		 0.08
+CourantFac			 0.23
+MaxSizeTimestep			 0.1
+MinSizeTimestep			 7e-15
+
+%---- Treatment of empty space and temperature limits
+InitGasTemp			 0.0
+MinGasTemp			 0.0
+MinimumDensityOnStartUp		 0.0
+LimitUBelowThisDensity		 0.0
+LimitUBelowCertainDensityToThisValue	 0
+MinEgySpec			 0.0
+
+%---- Tree algorithm, force accuracy, domain update frequency
+TypeOfOpeningCriterion			 1
+ErrTolTheta				 0.7
+ErrTolForceAcc				 0.002
+MultipleDomains				 32
+TopNodeFactor				 12
+ActivePartFracForNewDomainDecomp	 0.95
+
+%---- Initial density estimate
+DesNumNgb		 64
+MaxNumNgbDeviation	 1
+
+%---- System of units
+UnitLength_in_cm		 1.0
+UnitMass_in_g			 1.0
+UnitVelocity_in_cm_per_s	 1.0
+
+%---- Gravitational softening length
+GravityConstantInternal		 1.0
+SofteningComovingType0		 0.001
+SofteningComovingType1		 0
+SofteningComovingType2		 0
+SofteningComovingType3		 0
+SofteningComovingType4		 0
+SofteningComovingType5		 0
+SofteningMaxPhysType0		 0.001
+SofteningMaxPhysType1		 0
+SofteningMaxPhysType2		 0
+SofteningMaxPhysType3		 0
+SofteningMaxPhysType4		 0
+SofteningMaxPhysType5		 0
+SofteningTypeOfPartType0		 0
+SofteningTypeOfPartType1		 0
+SofteningTypeOfPartType2		 0
+SofteningTypeOfPartType3		 0
+SofteningTypeOfPartType4		 0
+SofteningTypeOfPartType5		 0
+
+%----- Mesh regularization options
+GasSoftFactor		 3.5
+CellShapingSpeed	 0.5
+CellMaxAngleFactor	 1.3
+
+%---- Refinement options
+ReferenceGasPartMass	 0.00009
+TargetGasMassFactor	 1.0
+RefinementCriterion	 1
+DerefinementCriterion	 1
+MaxVolumeDiff		 6.0
+MinVolume		 7.0e-06
+MaxVolume		 4.5e-03
+
+%---- Other options
+IsoSoundSpeed			0.1
+AlphaCoefficient		0.1
+InnerRadius			0
+OuterRadius			10000.0
+EvanescentBoundaryStrength	2.0
+CircumstellarBoundaryDensity	11.5460893821
+MaxBackgroundVolume		1.0
+MinBackgroundVolume		0.0008
+MinBackgroundMass		2e-20
+IgnoreRefinementsBeyondThisRadius	1.0
+IgnoreRefinementsWithinThisRadius	0
+BoundaryLayerScaleFactor		0.009
+SpecialBoundarySpeed		0
+SpecialBoundaryMotion		6
+SpecialBoundaryType		5
+OutflowPressure			0
+BinaryMassRatio			1.0
+BinarySoftening			0.025
+BinaryGrowthTime		0.0
+BinaryEccentricity		0.0
+BinaryBarycentricCoord		1
+CircumstellarSinkRadius		0.03
+CircumstellarSinkCriterion	2
+CircumstellarSinkEfficiency	1
